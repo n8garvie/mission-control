@@ -1,0 +1,35 @@
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+
+export default defineSchema({
+  subscriptions: defineTable({
+    name: v.string(),
+    provider: v.string(),
+    cost: v.number(),
+    billingCycle: v.union(v.literal("monthly"), v.literal("yearly")),
+    usage: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
+    renewalDate: v.string(),
+    category: v.string(),
+    iconName: v.string(),
+    description: v.optional(v.string()),
+    websiteUrl: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_provider", ["provider"])
+    .index("by_category", ["category"])
+    .index("by_renewal_date", ["renewalDate"]),
+
+  usageWindows: defineTable({
+    subscriptionId: v.id("subscriptions"),
+    name: v.string(),
+    durationMs: v.number(),
+    used: v.number(),
+    limit: v.number(),
+    unit: v.string(),
+    resetAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_subscription", ["subscriptionId"]),
+});
