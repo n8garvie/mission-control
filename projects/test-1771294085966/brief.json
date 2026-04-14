@@ -1,0 +1,21 @@
+{
+  "appName": "Plant care",
+  "style": "Organic, warm, premium",
+  "mood": "Calm, peaceful, floating",
+  "emotions": [
+    "serenity",
+    "warmth",
+    "trust",
+    "mindfulness"
+  ],
+  "colorDirection": "Warm sunset oranges, deep teals, soft golds",
+  "targetAudience": "Stressed professionals, mindfulness beginners",
+  "searchQueries": [
+    "meditation app UI design",
+    "zen minimalist interface",
+    "sunset gradient backgrounds",
+    "organic rounded UI components",
+    "calm premium app design"
+  ],
+  "layoutType": "centered-hero"
+}

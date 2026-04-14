@@ -1,0 +1,30 @@
+{
+  "cli": {
+    "version": ">= 7.0.0"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "ios": {
+        "enterpriseProvisioning": "adhoc"
+      }
+    },
+    "production": {
+      "autoIncrement": true
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6759948133",
+        "ascApiKeyPath": "./AuthKey.p8",
+        "ascApiKeyIssuerId": "7440c7d5-9e71-42a8-8788-2f292cdc2e12",
+        "ascApiKeyId": "3GL44B3F6L"
+      }
+    }
+  }
+}

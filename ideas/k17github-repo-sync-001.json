@@ -1,0 +1,34 @@
+{
+  "id": "k17github-repo-sync-001",
+  "title": "GitHub Repo Sync to Wiki Inbox",
+  "description": "Automatically download GitHub repositories I create or star, clone them locally, and maintain an indexed catalog in my wiki inbox folder.",
+  "status": "pending",
+  "priority": "medium",
+  "createdAt": "2026-04-14T09:56:00-07:00",
+  "source": "user-request",
+  "problem": "GitHub repos don't automatically sync to local machine. No centralized index in wiki. Manual clone and organization process.",
+  "solution": "Background service that monitors GitHub for new repos, auto-clones to ~/wiki/inbox/repos/, generates wiki index with metadata",
+  "features": [
+    "GitHub API integration (webhook or polling)",
+    "Auto-clone to local wiki inbox",
+    "Markdown index generation with metadata",
+    "Tagging system (language, type, status)",
+    "README extraction for quick reference",
+    "Periodic sync (daily/hourly)",
+    "Configurable filters"
+  ],
+  "techStack": ["GitHub API", "Git", "Node.js/Python", "Markdown"],
+  "successCriteria": [
+    "New repos appear in wiki inbox within 1 hour",
+    "Indexed catalog always up-to-date",
+    "Searchable by language, tags, description"
+  ],
+  "agents": {
+    "scout": null,
+    "forge": null,
+    "pixel": null,
+    "echo": null,
+    "integrator": null
+  },
+  "projectPath": "/home/n8garvie/.openclaw/workspace/mission-control/projects/github-repo-sync.md"
+}
