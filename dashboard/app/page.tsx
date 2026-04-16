@@ -114,65 +114,66 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* Header - Mobile Optimized */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-4">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold">
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-base sm:text-lg font-bold">
                 M
               </div>
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Mission Control</h1>
-                <p className="text-sm text-gray-500">Idea → Build → Deploy Pipeline</p>
+                <h1 className="text-base sm:text-xl font-bold text-gray-900">Mission Control</h1>
+                <p className="text-xs sm:text-sm text-gray-500 hidden sm:block">Idea → Build → Deploy Pipeline</p>
               </div>
             </div>
             
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-400">
+            <div className="flex items-center gap-2 sm:gap-4">
+              <span className="text-xs sm:text-sm text-gray-400 hidden sm:inline">
                 Updated {formatTime(lastUpdated)}
               </span>
               <Link
                 href="/ideas"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
+                className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium text-sm"
               >
                 <span>💡</span>
-                <span>Review Ideas</span>
+                <span className="hidden sm:inline">Review Ideas</span>
+                <span className="sm:hidden">Ideas</span>
               </Link>
             </div>
           </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Pipeline Stats */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+        {/* Pipeline Stats - Mobile Optimized */}
         <section className="mb-8">
-          <div className="grid grid-cols-6 gap-4">
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3 sm:gap-4">
             {stages.map((stage) => {
               const count = stats[stage.key as keyof PipelineStats] || 0;
               return (
-                <div key={stage.key} className="bg-white rounded-xl p-4 border border-gray-200">
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="text-2xl">{stage.icon}</span>
-                    <span className="text-sm font-medium text-gray-600">{stage.label}</span>
+                <div key={stage.key} className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+                  <div className="flex flex-col items-center sm:items-start sm:flex-row sm:gap-2 mb-1 sm:mb-2">
+                    <span className="text-xl sm:text-2xl">{stage.icon}</span>
+                    <span className="text-xs sm:text-sm font-medium text-gray-600 text-center sm:text-left hidden sm:block">{stage.label}</span>
                   </div>
-                  <div className="text-3xl font-bold text-gray-900">{count}</div>
-                  <div className={`h-1 mt-3 rounded-full ${stage.color} ${count > 0 ? 'opacity-100' : 'opacity-20'}`}></div>
+                  <div className="text-2xl sm:text-3xl font-bold text-gray-900 text-center sm:text-left">{count}</div>
+                  <div className={`h-1 mt-2 sm:mt-3 rounded-full ${stage.color} ${count > 0 ? 'opacity-100' : 'opacity-20'}`}></div>
                 </div>
               );
             })}
           </div>
         </section>
 
-        {/* Pipeline Progress Bar */}
+        {/* Pipeline Progress Bar - Mobile Optimized */}
         <section className="mb-8">
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Flow</h2>
+          <div className="bg-white rounded-xl p-4 sm:p-6 border border-gray-200">
+            <h2 className="text-base sm:text-lg font-semibold text-gray-900 mb-4">Pipeline Flow</h2>
             <div className="relative">
-              {/* Progress line */}
-              <div className="absolute top-6 left-0 right-0 h-1 bg-gray-200 rounded-full"></div>
+              {/* Progress line - hidden on mobile, shown on sm+ */}
+              <div className="hidden sm:block absolute top-6 left-0 right-0 h-1 bg-gray-200 rounded-full"></div>
               <div 
-                className="absolute top-6 left-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-500"
+                className="hidden sm:block absolute top-6 left-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-500"
                 style={{ 
                   width: stats.total > 0 
                     ? `${((stats.githubPushed + stats.vercelDeployed) / stats.total) * 100}%` 
@@ -180,21 +181,21 @@ export default function Home() {
                 }}
               ></div>
               
-              {/* Stage dots */}
-              <div className="relative flex justify-between">
+              {/* Stage dots - scrollable on mobile */}
+              <div className="flex sm:justify-between gap-4 sm:gap-0 overflow-x-auto pb-2 sm:pb-0 -mx-2 px-2 sm:mx-0 sm:px-0">
                 {stages.map((stage, i) => {
                   const count = stats[stage.key as keyof PipelineStats] || 0;
                   const isActive = count > 0;
                   return (
-                    <div key={stage.key} className="flex flex-col items-center">
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl mb-2 transition-all ${
+                    <div key={stage.key} className="flex flex-col items-center flex-shrink-0 min-w-[60px] sm:min-w-0">
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center text-lg sm:text-xl mb-2 transition-all ${
                         isActive 
                           ? `${stage.color} text-white shadow-lg` 
                           : 'bg-gray-100 text-gray-400'
                       }`}>
                         {stage.icon}
                       </div>
-                      <span className="text-xs font-medium text-gray-600">{stage.label}</span>
+                      <span className="text-[10px] sm:text-xs font-medium text-gray-600 text-center leading-tight">{stage.label}</span>
                       <span className="text-sm font-bold text-gray-900">{count}</span>
                     </div>
                   );
