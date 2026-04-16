@@ -3,7 +3,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { fetchQuery } from "convex/nextjs";
-import { api } from "../../convex/_generated/api";
+import { api } from "../../../convex/_generated/api";
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
