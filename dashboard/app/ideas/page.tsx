@@ -4,6 +4,15 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import IdeaCard from "../components/IdeaCard";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+
+interface DeploymentStats {
+  total: number;
+  vercelDeployed: number;
+  githubOnly: number;
+  inProgress: number;
+  notStarted: number;
+}
 
 const statusTabs = [
   { id: "pending", label: "Pending Review", icon: "⏳" },
@@ -16,6 +25,25 @@ const statusTabs = [
 export default function IdeasPage() {
   const ideas = useQuery(api.ideas.list);
   const stats = useQuery(api.ideas.getStats);
+  const [deploymentStats, setDeploymentStats] = useState<DeploymentStats>({
+    total: 0,
+    vercelDeployed: 0,
+    githubOnly: 0,
+    inProgress: 0,
+    notStarted: 0,
+  });
+
+  // Fetch deployment stats from build API
+  useEffect(() => {
+    fetch("/api/build-deployments")
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.stats) {
+          setDeploymentStats(data.stats);
+        }
+      })
+      .catch((err) => console.error("Failed to fetch deployment stats:", err));
+  }, []);
 
   if (ideas === undefined || stats === undefined) {
     return (
@@ -34,14 +62,6 @@ export default function IdeasPage() {
     approved: ideas.filter((i) => i.status === "approved"),
     building: ideas.filter((i) => i.status === "building"),
     done: ideas.filter((i) => i.status === "done"),
-  };
-
-  // Calculate deployment stats
-  const deploymentStats = {
-    vercelDeployed: ideas.filter((i) => i.deploymentStatus === "vercel_deployed").length,
-    githubOnly: ideas.filter((i) => i.deploymentStatus === "github_created").length,
-    inProgress: ideas.filter((i) => i.deploymentStatus === "in_progress").length,
-    notStarted: ideas.filter((i) => !i.deploymentStatus || i.deploymentStatus === "not_started").length,
   };
 
   return (
