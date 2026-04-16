@@ -25,15 +25,20 @@ export interface PipelineIdea {
 function extractUrl(repoUrl: string | undefined): string | undefined {
   if (!repoUrl) return undefined;
   const clean = repoUrl.replace(/\x1b\[[0-9;]*m/g, '').replace(/\n/g, ' ').replace(/\r/g, ' ');
-  const match = clean.match(/https:\/\/github\.com\/[^\s]+\.git/);
+  // Match GitHub URLs with or without .git suffix
+  const match = clean.match(/https:\/\/github\.com\/[^\s\/]+(?:\.git)?/);
   return match ? match[0].replace('.git', '') : undefined;
 }
 
 function extractVercel(vercelUrl: string | undefined): string | undefined {
   if (!vercelUrl) return undefined;
   const clean = vercelUrl.replace(/\x1b\[[0-9;]*m/g, '').replace(/\n/g, ' ').replace(/\r/g, ' ');
-  const match = clean.match(/https:\/\/[^\s]+\.vercel\.app/);
-  return match ? match[0] : undefined;
+  // Match various Vercel URL formats including those with https:// prefix and without
+  const match = clean.match(/https?:\/\/[^\s"]+\.vercel\.app/);
+  if (match) return match[0];
+  // Also try matching without protocol
+  const matchNoProtocol = clean.match(/[a-z0-9-]+\.vercel\.app/);
+  return matchNoProtocol ? `https://${matchNoProtocol[0]}` : undefined;
 }
 
 export function getPipelineFromBuilds(): PipelineIdea[] {
