@@ -12,7 +12,7 @@ interface Idea {
   targetAudience: string;
   mvpScope: string;
   potential: "low" | "medium" | "high" | "moonshot";
-  status: "pending" | "approved";
+  status: "pending" | "approved" | "building" | "done";
   createdAt: number;
   source?: string;
   tags?: string[];
