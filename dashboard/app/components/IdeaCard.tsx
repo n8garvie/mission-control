@@ -18,6 +18,10 @@ interface Idea {
   deployedUrl?: string;
   source?: string;
   tags?: string[];
+  // Deployment tracking
+  deploymentStatus?: "not_started" | "in_progress" | "github_created" | "vercel_deployed" | "failed";
+  githubRepoUrl?: string;
+  buildId?: string;
 }
 
 interface IdeaCardProps {
@@ -60,10 +64,18 @@ const statusConfig = {
   },
   done: {
     badge: "badge-done",
-    label: "Deployed",
-    icon: "🚀",
-    borderColor: "border-l-4 border-l-green-500",
+    label: "Agent Complete",
+    icon: "✨",
+    borderColor: "border-l-4 border-l-purple-500",
   },
+};
+
+const deploymentStatusConfig = {
+  not_started: { label: "Not Started", icon: "⚪", color: "text-gray-400" },
+  in_progress: { label: "Deploying", icon: "🔄", color: "text-amber-500" },
+  github_created: { label: "On GitHub", icon: "📦", color: "text-blue-500" },
+  vercel_deployed: { label: "Live", icon: "🚀", color: "text-green-500" },
+  failed: { label: "Failed", icon: "❌", color: "text-red-500" },
 };
 
 export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
@@ -74,6 +86,9 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   const removeIdea = useMutation(api.ideas.remove);
 
   const status = statusConfig[idea.status];
+  const deploymentStatus = idea.deploymentStatus 
+    ? deploymentStatusConfig[idea.deploymentStatus] 
+    : deploymentStatusConfig.not_started;
   const createdDate = new Date(idea.createdAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -128,16 +143,35 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
           </div>
         );
       case "done":
-        return (
-          <a
-            href={idea.deployedUrl || "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-primary text-sm w-full text-center"
-          >
-            🚀 View Deployment
-          </a>
-        );
+        if (idea.deploymentStatus === "vercel_deployed" && idea.deployedUrl) {
+          return (
+            <a
+              href={idea.deployedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-primary text-sm w-full text-center"
+            >
+              🚀 View Live Site
+            </a>
+          );
+        } else if (idea.deploymentStatus === "github_created" && idea.githubRepoUrl) {
+          return (
+            <a
+              href={idea.githubRepoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-secondary text-sm w-full text-center"
+            >
+              📦 View on GitHub
+            </a>
+          );
+        } else {
+          return (
+            <div className="flex items-center justify-center gap-2 text-sm text-purple-600 bg-purple-50 py-2 px-4 rounded">
+              <span>✨ Agents finished — awaiting deployment</span>
+            </div>
+          );
+        }
     }
   };
 
@@ -147,10 +181,16 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
       <div className="p-5">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="flex items-center gap-2 mb-2 flex-wrap">
               <span className={`badge ${status.badge}`}>
                 {status.icon} {status.label}
               </span>
+              {/* Deployment Status Badge */}
+              {idea.status !== "pending" && idea.status !== "approved" && (
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 ${deploymentStatus.color}`}>
+                  {deploymentStatus.icon} {deploymentStatus.label}
+                </span>
+              )}
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${potentialColors[idea.potential]}`}>
                 {potentialLabels[idea.potential]}
               </span>

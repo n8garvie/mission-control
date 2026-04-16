@@ -36,6 +36,14 @@ export default function IdeasPage() {
     done: ideas.filter((i) => i.status === "done"),
   };
 
+  // Calculate deployment stats
+  const deploymentStats = {
+    vercelDeployed: ideas.filter((i) => i.deploymentStatus === "vercel_deployed").length,
+    githubOnly: ideas.filter((i) => i.deploymentStatus === "github_created").length,
+    inProgress: ideas.filter((i) => i.deploymentStatus === "in_progress").length,
+    notStarted: ideas.filter((i) => !i.deploymentStatus || i.deploymentStatus === "not_started").length,
+  };
+
   return (
     <div className="min-h-screen bg-[var(--bg-secondary)]">
       {/* Header */}
@@ -79,8 +87,17 @@ export default function IdeasPage() {
                   <span className="text-caption block">Building</span>
                 </div>
                 <div className="text-center">
-                  <span className="text-2xl font-bold text-green-600">{stats.done}</span>
-                  <span className="text-caption block">Done</span>
+                  <span className="text-2xl font-bold text-purple-500">{stats.done}</span>
+                  <span className="text-caption block">Agent Done</span>
+                </div>
+                <div className="w-px h-8 bg-[var(--border-light)]"></div>
+                <div className="text-center">
+                  <span className="text-2xl font-bold text-green-600">{deploymentStats.vercelDeployed}</span>
+                  <span className="text-caption block">🚀 Live</span>
+                </div>
+                <div className="text-center">
+                  <span className="text-2xl font-bold text-blue-500">{deploymentStats.githubOnly}</span>
+                  <span className="text-caption block">📦 GitHub</span>
                 </div>
               </div>
             </div>

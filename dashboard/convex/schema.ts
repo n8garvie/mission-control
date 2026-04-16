@@ -154,9 +154,22 @@ export default defineSchema({
     source: v.optional(v.string()), // e.g., "reddit", "producthunt", "scout"
     tags: v.optional(v.array(v.string())),
     scoutAgentId: v.optional(v.id("agents")),
+    // Deployment tracking fields
+    deploymentStatus: v.optional(v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("github_created"),
+      v.literal("vercel_deployed"),
+      v.literal("failed")
+    )),
+    githubRepoUrl: v.optional(v.string()),
+    buildId: v.optional(v.string()),
+    buildStartedAt: v.optional(v.number()),
+    buildCompletedAt: v.optional(v.number()),
   }).index("by_status", ["status"])
     .index("by_potential", ["potential"])
-    .index("by_created", ["createdAt"]),
+    .index("by_created", ["createdAt"])
+    .index("by_deployment_status", ["deploymentStatus"]),
 
   // Rejected/deleted ideas - to prevent duplicates
   rejectedIdeas: defineTable({

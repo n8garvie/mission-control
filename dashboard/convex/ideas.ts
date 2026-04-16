@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { Id } from "./_generated/dataModel";
 
 // List all ideas
 export const list = query({
@@ -295,5 +296,46 @@ export const resetToApproved = mutation({
     });
 
     return args.ideaId;
+  },
+});
+
+// Update deployment status (called by sync script)
+export const updateDeployment = mutation({
+  args: {
+    ideaId: v.string(),
+    deploymentStatus: v.union(
+      v.literal("not_started"),
+      v.literal("in_progress"),
+      v.literal("github_created"),
+      v.literal("vercel_deployed"),
+      v.literal("failed")
+    ),
+    githubRepoUrl: v.optional(v.string()),
+    deployedUrl: v.optional(v.string()),
+    buildId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    // Find idea by build ID or ID
+    let idea: any = await ctx.db.get(args.ideaId as Id<"ideas">);
+    
+    // If not found by ID, try to find by buildId
+    if (!idea && args.buildId) {
+      const allIdeas = await ctx.db.query("ideas").collect();
+      idea = allIdeas.find((i: any) => i.buildId === args.buildId);
+    }
+
+    if (!idea) {
+      console.log(`Idea not found: ${args.ideaId}`);
+      return null;
+    }
+
+    await ctx.db.patch(idea._id, {
+      deploymentStatus: args.deploymentStatus,
+      githubRepoUrl: args.githubRepoUrl,
+      deployedUrl: args.deployedUrl,
+      buildId: args.buildId,
+    });
+
+    return idea._id;
   },
 });
