@@ -13,7 +13,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({
       sparklines: stats.sparklines,
       lastUpdated: stats.lastUpdated,
-      pipeline: stats.pipeline,
+      pipeline: stats.pipeline || {
+        buildsStarted: stats.totalBuilds,
+        buildsWithCode: 0,
+        buildsCommitted: 0,
+        buildsDeployed: 0,
+      },
       totals: {
         totalBuilds: stats.totalBuilds,
         totalIdeas: stats.pendingIdeas,
