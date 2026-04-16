@@ -8,18 +8,29 @@ import AgentCards from "./components/AgentCards";
 import ActivityFeed from "./components/ActivityFeed";
 import StatsOverview from "./components/StatsOverview";
 import QuickActions from "./components/QuickActions";
+import PipelineTracker from "./components/PipelineTracker";
+import SyncButton from "./components/SyncButton";
 import Link from "next/link";
 
-interface PipelineSparklines {
-  activeAgents: number[];
-  openTasks: number[];
-  completedThisWeek: number[];
-  pendingIdeas: number[];
+interface PipelineStats {
+  sparklines: {
+    activeAgents: number[];
+    openTasks: number[];
+    completedThisWeek: number[];
+    pendingIdeas: number[];
+  };
+  lastUpdated?: number;
+  pipeline?: {
+    buildsStarted: number;
+    buildsWithCode: number;
+    buildsCommitted: number;
+    buildsDeployed: number;
+  };
 }
 
 export default function Home() {
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [sparklines, setSparklines] = useState<PipelineSparklines | undefined>();
+  const [pipelineStats, setPipelineStats] = useState<PipelineStats | undefined>();
   
   const agents = useQuery(api.agents.list);
   const tasks = useQuery(api.tasks.list);
@@ -32,7 +43,11 @@ export default function Home() {
       .then(res => res.json())
       .then(data => {
         if (data.sparklines) {
-          setSparklines(data.sparklines);
+          setPipelineStats({
+            sparklines: data.sparklines,
+            lastUpdated: data.lastUpdated,
+            pipeline: data.pipeline,
+          });
         }
       })
       .catch(err => console.error("Failed to fetch pipeline stats:", err));
@@ -96,15 +111,7 @@ export default function Home() {
                 )}
               </Link>
               
-              <button
-                onClick={handleRefresh}
-                className={`p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-all duration-200 ${isRefreshing ? 'animate-spin' : ''}`}
-                title="Refresh"
-              >
-                <svg className="w-5 h-5 text-[var(--text-tertiary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
+              <SyncButton lastSynced={pipelineStats?.lastUpdated} />
               
               <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--success-50)] rounded-full">
                 <span className="w-2 h-2 rounded-full bg-[var(--success-500)] animate-pulse"></span>
@@ -126,8 +133,14 @@ export default function Home() {
             inProgressTasks={inProgressTasks}
             completedThisWeek={completedThisWeek}
             pendingIdeas={ideaStats.pending}
-            sparklines={sparklines}
+            sparklines={pipelineStats?.sparklines}
+            lastUpdated={pipelineStats?.lastUpdated}
           />
+        </section>
+
+        {/* Pipeline Tracker */}
+        <section className="mb-8">
+          <PipelineTracker pipeline={pipelineStats?.pipeline} />
         </section>
 
         {/* Quick Actions */}

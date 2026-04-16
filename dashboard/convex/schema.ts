@@ -198,4 +198,28 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_subscription", ["subscriptionId"]),
+
+  // Dashboard stats - synced from local build system
+  dashboardStats: defineTable({
+    activeAgents: v.number(),
+    openTasks: v.number(),
+    completedThisWeek: v.number(),
+    pendingIdeas: v.number(),
+    totalBuilds: v.number(),
+    runningBuilds: v.optional(v.number()),
+    // Pipeline stages
+    pipeline: v.optional(v.object({
+      buildsStarted: v.number(),
+      buildsWithCode: v.number(),
+      buildsCommitted: v.number(),
+      buildsDeployed: v.number(),
+    })),
+    sparklines: v.object({
+      activeAgents: v.array(v.number()),
+      openTasks: v.array(v.number()),
+      completedThisWeek: v.array(v.number()),
+      pendingIdeas: v.array(v.number()),
+    }),
+    lastUpdated: v.number(),
+  }),
 });

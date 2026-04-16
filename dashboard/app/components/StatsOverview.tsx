@@ -15,6 +15,7 @@ interface StatsOverviewProps {
     completedThisWeek: number[];
     pendingIdeas: number[];
   };
+  lastUpdated?: number;
 }
 
 // Mini sparkline component - shows visual trend only
@@ -112,6 +113,20 @@ function calculatePercentChange(current: number, previous: number): string {
   return "—";
 }
 
+// Format relative time
+function formatLastUpdated(timestamp?: number): string {
+  if (!timestamp) return "Unknown";
+  const now = Date.now();
+  const diff = now - timestamp * 1000;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  
+  if (seconds < 60) return "Just now";
+  if (minutes < 2) return "1 min ago";
+  if (minutes < 60) return `${minutes} mins ago`;
+  return `${Math.floor(minutes / 60)}h ago`;
+}
+
 export default function StatsOverview({
   totalAgents,
   activeAgents,
@@ -120,6 +135,7 @@ export default function StatsOverview({
   completedThisWeek,
   pendingIdeas,
   sparklines,
+  lastUpdated,
 }: StatsOverviewProps) {
   const animatedAgents = useAnimatedCounter(activeAgents);
   const animatedTasks = useAnimatedCounter(openTasks);
@@ -211,8 +227,16 @@ export default function StatsOverview({
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {stats.map((stat, index) => (
+    <div>
+      <div className="flex items-center justify-between mb-3 px-1">
+        <h2 className="text-sm font-medium text-[var(--text-secondary)]">Overview</h2>
+        <span className="text-xs text-[var(--text-tertiary)] flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-500)] animate-pulse"></span>
+          Updated {formatLastUpdated(lastUpdated)}
+        </span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat, index) => (
         <div
           key={stat.label}
           className="card card-interactive p-5 animate-fade-in-up"
@@ -255,6 +279,7 @@ export default function StatsOverview({
           </div>
         </div>
       ))}
+      </div>
     </div>
   );
 }
