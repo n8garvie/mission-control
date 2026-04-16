@@ -44,7 +44,7 @@ export default function IdeasPage() {
   const pendingIdeas = ideas.filter((i: Idea) => i.status === "pending");
   const approvedIdeas = ideas.filter((i: Idea) => i.status === "approved");
 
-  const handleApprove = async (ideaId: string) => {
+  const handleApprove = async (ideaId: Id<"ideas">) => {
     setApproving(ideaId);
     try {
       await approveIdea({ ideaId });
@@ -55,7 +55,7 @@ export default function IdeasPage() {
     }
   };
 
-  const handleDelete = async (ideaId: string) => {
+  const handleDelete = async (ideaId: Id<"ideas">) => {
     if (!confirm("Delete this idea?")) return;
     try {
       await removeIdea({ ideaId, reason: "User deleted" });
