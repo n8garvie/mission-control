@@ -2,7 +2,42 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PipelineIdea, getStageLabel, getStageColor } from "./lib/pipeline";
+
+interface PipelineIdea {
+  id: string;
+  title: string;
+  description: string;
+  status: 'pending' | 'approved' | 'building' | 'agent_complete' | 'github_pushed' | 'vercel_deployed';
+  stage: number;
+  createdAt: number;
+  githubUrl?: string;
+  vercelUrl?: string;
+  potential: string;
+}
+
+function getStageLabel(status: string): string {
+  const labels: Record<string, string> = {
+    pending: 'Pending Review',
+    approved: 'Approved',
+    building: 'Building',
+    agent_complete: 'Code Ready',
+    github_pushed: 'On GitHub',
+    vercel_deployed: 'Live',
+  };
+  return labels[status] || status;
+}
+
+function getStageColor(status: string): string {
+  const colors: Record<string, string> = {
+    pending: 'text-gray-500',
+    approved: 'text-blue-500',
+    building: 'text-amber-500',
+    agent_complete: 'text-purple-500',
+    github_pushed: 'text-indigo-500',
+    vercel_deployed: 'text-green-500',
+  };
+  return colors[status] || 'text-gray-500';
+}
 
 interface PipelineStats {
   total: number;

@@ -1,4 +1,5 @@
 // Unified pipeline data - connects ideas to actual build status
+// NOTE: This file uses Node.js APIs and should only be imported in Server Components or API routes
 import fs from 'fs';
 import path from 'path';
 
