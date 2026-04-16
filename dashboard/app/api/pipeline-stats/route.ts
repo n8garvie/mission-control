@@ -10,15 +10,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     // Fetch stats from Convex
     const stats = await fetchQuery(api.stats.get, {});
     
+    // Handle both old and new stats formats
+    const pipeline = 'pipeline' in stats && stats.pipeline ? stats.pipeline : {
+      buildsStarted: stats.totalBuilds,
+      buildsWithCode: 0,
+      buildsCommitted: 0,
+      buildsDeployed: 0,
+    };
+    
     return NextResponse.json({
       sparklines: stats.sparklines,
       lastUpdated: stats.lastUpdated,
-      pipeline: stats.pipeline || {
-        buildsStarted: stats.totalBuilds,
-        buildsWithCode: 0,
-        buildsCommitted: 0,
-        buildsDeployed: 0,
-      },
+      pipeline,
       totals: {
         totalBuilds: stats.totalBuilds,
         totalIdeas: stats.pendingIdeas,
