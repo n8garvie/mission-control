@@ -339,3 +339,15 @@ export const updateDeployment = mutation({
     return idea._id;
   },
 });
+
+// Remove all ideas (reset)
+export const removeAll = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const ideas = await ctx.db.query("ideas").collect();
+    for (const idea of ideas) {
+      await ctx.db.delete(idea._id);
+    }
+    return { deleted: ideas.length };
+  },
+});

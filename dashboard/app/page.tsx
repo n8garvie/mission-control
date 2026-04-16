@@ -1,198 +1,251 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useQuery } from "convex/react";
-import { api } from "../convex/_generated/api";
-import TaskBoard from "./components/TaskBoard";
-import AgentCards from "./components/AgentCards";
-import ActivityFeed from "./components/ActivityFeed";
-import StatsOverview from "./components/StatsOverview";
-import QuickActions from "./components/QuickActions";
-import PipelineTracker from "./components/PipelineTracker";
-import SyncButton from "./components/SyncButton";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { PipelineIdea, getStageLabel, getStageColor } from "./lib/pipeline";
 
 interface PipelineStats {
-  sparklines: {
-    activeAgents: number[];
-    openTasks: number[];
-    completedThisWeek: number[];
-    pendingIdeas: number[];
-  };
-  lastUpdated?: number;
-  pipeline?: {
-    buildsStarted: number;
-    buildsWithCode: number;
-    buildsCommitted: number;
-    buildsDeployed: number;
-  };
+  total: number;
+  pending: number;
+  approved: number;
+  building: number;
+  agentComplete: number;
+  githubPushed: number;
+  vercelDeployed: number;
 }
 
+const stages = [
+  { key: 'pending', label: 'Pending', color: 'bg-gray-400', icon: '⏳' },
+  { key: 'approved', label: 'Approved', color: 'bg-blue-500', icon: '✅' },
+  { key: 'building', label: 'Building', color: 'bg-amber-500', icon: '🔨' },
+  { key: 'agentComplete', label: 'Code Ready', color: 'bg-purple-500', icon: '💻' },
+  { key: 'githubPushed', label: 'GitHub', color: 'bg-indigo-500', icon: '📦' },
+  { key: 'vercelDeployed', label: 'Live', color: 'bg-green-500', icon: '🚀' },
+];
+
 export default function Home() {
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [pipelineStats, setPipelineStats] = useState<PipelineStats | undefined>();
-  
-  const agents = useQuery(api.agents.list);
-  const tasks = useQuery(api.tasks.list);
-  const activities = useQuery(api.activities.listRecent, { limit: 20 });
-  const ideaStats = useQuery(api.ideas.getStats);
+  const [pipeline, setPipeline] = useState<PipelineIdea[]>([]);
+  const [stats, setStats] = useState<PipelineStats>({
+    total: 0,
+    pending: 0,
+    approved: 0,
+    building: 0,
+    agentComplete: 0,
+    githubPushed: 0,
+    vercelDeployed: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<number>(Date.now());
 
-  // Fetch real pipeline stats for sparklines
-  useEffect(() => {
-    fetch("/api/pipeline-stats")
-      .then(res => res.json())
-      .then(data => {
-        if (data.sparklines) {
-          setPipelineStats({
-            sparklines: data.sparklines,
-            lastUpdated: data.lastUpdated,
-            pipeline: data.pipeline,
-          });
-        }
-      })
-      .catch(err => console.error("Failed to fetch pipeline stats:", err));
-  }, []);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => setIsRefreshing(false), 600);
+  const fetchPipeline = async () => {
+    try {
+      const res = await fetch("/api/pipeline");
+      const data = await res.json();
+      setPipeline(data.pipeline || []);
+      setStats(data.stats || stats);
+      setLastUpdated(Date.now());
+    } catch (err) {
+      console.error("Failed to fetch pipeline:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  if (agents === undefined || tasks === undefined || activities === undefined || ideaStats === undefined) {
+  useEffect(() => {
+    fetchPipeline();
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchPipeline, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-secondary)]">
-        <div className="text-center animate-pulse">
-          <div className="skeleton w-16 h-16 rounded-xl mx-auto mb-4"></div>
-          <div className="skeleton w-48 h-4 rounded mx-auto mb-2"></div>
-          <div className="skeleton w-32 h-3 rounded mx-auto"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading pipeline...</p>
         </div>
       </div>
     );
   }
 
-  const activeAgents = agents.filter(a => a.status === "active").length;
-  const openTasks = tasks.filter(t => t.status !== "done").length;
-  const inProgressTasks = tasks.filter(t => t.status === "in_progress").length;
-  const completedThisWeek = tasks.filter(t => {
-    if (t.status !== "done") return false;
-    // Use _creationTime as fallback for when task was completed
-    const completed = new Date(t._creationTime);
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    return completed > weekAgo;
-  }).length;
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit',
+      hour12: true 
+    });
+  };
 
   return (
-    <div className="min-h-screen bg-[var(--bg-secondary)]">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-[var(--border-light)] sticky top-0 z-50">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--accent-500)] to-[var(--accent-700)] flex items-center justify-center text-white text-lg font-bold shadow-lg shadow-indigo-500/20">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-bold">
                 M
               </div>
               <div>
-                <h1 className="heading-lg">Mission Control</h1>
-                <p className="text-small">Multi-Agent Design Studio</p>
+                <h1 className="text-xl font-bold text-gray-900">Mission Control</h1>
+                <p className="text-sm text-gray-500">Idea → Build → Deploy Pipeline</p>
               </div>
             </div>
             
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-gray-400">
+                Updated {formatTime(lastUpdated)}
+              </span>
               <Link
                 href="/ideas"
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-[var(--bg-tertiary)] transition-all duration-200 group"
+                className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium"
               >
-                <span className="text-lg group-hover:scale-110 transition-transform">💡</span>
-                <span className="text-small font-medium">Ideas</span>
-                {ideaStats.pending > 0 && (
-                  <span className="bg-amber-500 text-white text-xs px-1.5 py-0.5 rounded-full animate-pulse">
-                    {ideaStats.pending}
-                  </span>
-                )}
+                <span>💡</span>
+                <span>Review Ideas</span>
               </Link>
-              
-              <SyncButton lastSynced={pipelineStats?.lastUpdated} />
-              
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-[var(--success-50)] rounded-full">
-                <span className="w-2 h-2 rounded-full bg-[var(--success-500)] animate-pulse"></span>
-                <span className="text-small font-medium text-[var(--success-600)]">{activeAgents} active</span>
-              </div>
             </div>
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-[1600px] mx-auto px-6 py-8">
-        {/* Stats Overview */}
-        <section className="mb-8 animate-fade-in">
-          <StatsOverview 
-            totalAgents={agents.length}
-            activeAgents={activeAgents}
-            openTasks={openTasks}
-            inProgressTasks={inProgressTasks}
-            completedThisWeek={completedThisWeek}
-            pendingIdeas={ideaStats.pending}
-            sparklines={pipelineStats?.sparklines}
-            lastUpdated={pipelineStats?.lastUpdated}
-          />
-        </section>
-
-        {/* Pipeline Tracker */}
+      <main className="max-w-7xl mx-auto px-6 py-8">
+        {/* Pipeline Stats */}
         <section className="mb-8">
-          <PipelineTracker pipeline={pipelineStats?.pipeline} />
+          <div className="grid grid-cols-6 gap-4">
+            {stages.map((stage) => {
+              const count = stats[stage.key as keyof PipelineStats] || 0;
+              return (
+                <div key={stage.key} className="bg-white rounded-xl p-4 border border-gray-200">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">{stage.icon}</span>
+                    <span className="text-sm font-medium text-gray-600">{stage.label}</span>
+                  </div>
+                  <div className="text-3xl font-bold text-gray-900">{count}</div>
+                  <div className={`h-1 mt-3 rounded-full ${stage.color} ${count > 0 ? 'opacity-100' : 'opacity-20'}`}></div>
+                </div>
+              );
+            })}
+          </div>
         </section>
 
-        {/* Quick Actions */}
-        <section className="mb-10">
-          <QuickActions />
+        {/* Pipeline Progress Bar */}
+        <section className="mb-8">
+          <div className="bg-white rounded-xl p-6 border border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Pipeline Flow</h2>
+            <div className="relative">
+              {/* Progress line */}
+              <div className="absolute top-6 left-0 right-0 h-1 bg-gray-200 rounded-full"></div>
+              <div 
+                className="absolute top-6 left-0 h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-green-500 rounded-full transition-all duration-500"
+                style={{ 
+                  width: stats.total > 0 
+                    ? `${((stats.githubPushed + stats.vercelDeployed) / stats.total) * 100}%` 
+                    : '0%' 
+                }}
+              ></div>
+              
+              {/* Stage dots */}
+              <div className="relative flex justify-between">
+                {stages.map((stage, i) => {
+                  const count = stats[stage.key as keyof PipelineStats] || 0;
+                  const isActive = count > 0;
+                  return (
+                    <div key={stage.key} className="flex flex-col items-center">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl mb-2 transition-all ${
+                        isActive 
+                          ? `${stage.color} text-white shadow-lg` 
+                          : 'bg-gray-100 text-gray-400'
+                      }`}>
+                        {stage.icon}
+                      </div>
+                      <span className="text-xs font-medium text-gray-600">{stage.label}</span>
+                      <span className="text-sm font-bold text-gray-900">{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </section>
 
-        {/* Two Column Layout: Task Board + Activity Feed */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Task Board - 2 columns */}
-          <section className="xl:col-span-2">
-            <div className="flex items-center justify-between mb-5">
-              <div className="flex items-center gap-3">
-                <h2 className="heading-md">Task Board</h2>
-                <span className="px-2 py-0.5 bg-[var(--bg-tertiary)] rounded-full text-xs font-medium text-[var(--text-tertiary)]">
-                  {tasks.length}
-                </span>
+        {/* Recent Pipeline Items */}
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-gray-900">Recent Pipeline</h2>
+            <span className="text-sm text-gray-500">{pipeline.length} total items</span>
+          </div>
+          
+          <div className="space-y-3">
+            {pipeline.slice(0, 10).map((item) => (
+              <div 
+                key={item.id} 
+                className="bg-white rounded-lg p-4 border border-gray-200 hover:border-blue-300 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3 mb-1">
+                      <h3 className="font-semibold text-gray-900">{item.title}</h3>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${getStageColor(item.status)} bg-opacity-10`}>
+                        {getStageLabel(item.status)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-500 line-clamp-1">{item.description}</p>
+                  </div>
+                  <div className="flex items-center gap-3 ml-4">
+                    {/* Stage indicators */}
+                    <div className="flex items-center gap-1">
+                      {stages.map((s, i) => (
+                        <div 
+                          key={s.key}
+                          className={`w-2 h-2 rounded-full ${
+                            i <= item.stage ? s.color : 'bg-gray-200'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                    
+                    {/* Action links */}
+                    {item.vercelUrl && (
+                      <a 
+                        href={item.vercelUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-green-600 hover:underline"
+                      >
+                        🚀 Live
+                      </a>
+                    )}
+                    {item.githubUrl && !item.vercelUrl && (
+                      <a 
+                        href={item.githubUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-indigo-600 hover:underline"
+                      >
+                        📦 GitHub
+                      </a>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-[var(--accent-500)]"></span>
-                <span className="text-caption">{openTasks} open</span>
-              </div>
+            ))}
+          </div>
+          
+          {pipeline.length === 0 && (
+            <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
+              <div className="text-4xl mb-3">🚀</div>
+              <h3 className="text-lg font-medium text-gray-900 mb-1">Pipeline Empty</h3>
+              <p className="text-gray-500">Approve ideas to start the build pipeline</p>
+              <Link 
+                href="/ideas"
+                className="inline-block mt-4 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+              >
+                Review Ideas
+              </Link>
             </div>
-            <TaskBoard tasks={tasks} agents={agents} />
-          </section>
-
-          {/* Right Column - Agent Cards + Activity Feed */}
-          <section className="space-y-8">
-            {/* Agent Cards */}
-            <div>
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="heading-md">The Team</h2>
-                <Link href="/agents" className="text-xs font-medium text-[var(--accent-600)] hover:text-[var(--accent-700)] transition-colors">
-                  View all →
-                </Link>
-              </div>
-              <AgentCards agents={agents} />
-            </div>
-
-            {/* Activity Feed */}
-            <div>
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="heading-md">Activity</h2>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--success-500)] animate-pulse"></span>
-                  <span className="text-caption">Live</span>
-                </span>
-              </div>
-              <ActivityFeed activities={activities} />
-            </div>
-          </section>
-        </div>
+          )}
+        </section>
       </main>
     </div>
   );
