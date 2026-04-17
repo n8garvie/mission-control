@@ -10,6 +10,7 @@
 
 import type * as activities from "../activities.js";
 import type * as agents from "../agents.js";
+import type * as builds from "../builds.js";
 import type * as cleanup from "../cleanup.js";
 import type * as documents from "../documents.js";
 import type * as ideas from "../ideas.js";
@@ -30,6 +31,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   activities: typeof activities;
   agents: typeof agents;
+  builds: typeof builds;
   cleanup: typeof cleanup;
   documents: typeof documents;
   ideas: typeof ideas;

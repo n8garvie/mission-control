@@ -48,7 +48,13 @@ function getBuildDeploymentStatus(buildId) {
   }
 
   try {
-    const metadata = JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
+    // Read file and clean up newlines that break JSON parsing
+    const fileContent = fs.readFileSync(jsonPath, 'utf-8');
+    // Some build JSON files have newlines in string values - fix them
+    const cleanedContent = fileContent
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r');
+    const metadata = JSON.parse(cleanedContent);
     const repoName = extractRepoName(metadata.repoUrl);
     const repoUrl = extractCleanUrl(metadata.repoUrl);
     const vercelUrl = extractVercelUrl(metadata.vercelUrl);

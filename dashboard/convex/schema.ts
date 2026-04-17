@@ -235,4 +235,37 @@ export default defineSchema({
     }),
     lastUpdated: v.number(),
   }),
+
+  // Build tracking - stores actual build pipeline status
+  builds: defineTable({
+    ideaId: v.optional(v.id("ideas")),
+    buildId: v.string(), // e.g., k175fja4ncy54132ag0tnava6h851mct
+    title: v.string(),
+    description: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("building"),
+      v.literal("agent_complete"),
+      v.literal("github_pushed"),
+      v.literal("vercel_deployed"),
+      v.literal("failed")
+    ),
+    stage: v.number(), // 0-5
+    potential: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("moonshot"))),
+    githubUrl: v.optional(v.string()),
+    vercelUrl: v.optional(v.string()),
+    startedAt: v.number(),
+    completedAt: v.optional(v.number()),
+    // Agent tracking
+    agents: v.optional(v.object({
+      forge: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
+      pixel: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
+      echo: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
+      integrator: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
+      lens: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
+    })),
+  })
+    .index("by_status", ["status"])
+    .index("by_idea", ["ideaId"])
+    .index("by_build_id", ["buildId"]),
 });
