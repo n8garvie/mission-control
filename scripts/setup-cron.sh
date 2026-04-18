@@ -11,6 +11,7 @@ echo "  :00, :15, :30, :45 - Atlas (PM)"
 echo "  :02, :17, :32, :47 - Muse (Creative Director)"
 echo "  :04, :19, :34, :49 - Pixel (Designer)"
 echo "  :06, :21, :36, :51 - Scout (Researcher)"
+echo "  :07, :22, :37, :52 - Archivist (Knowledge Manager) - 1 min after Scout"
 echo "  :08, :23, :38, :53 - Forge (Tech Lead)"
 echo "  :10, :25, :40, :55 - Lens (QA)"
 echo "  :12, :27, :42, :57 - Echo (Copywriter)"
@@ -33,6 +34,7 @@ cat >> "$TEMP_CRON" << EOF
 2,17,32,47 * * * * $SCRIPT_DIR/heartbeat-muse.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/muse.log 2>&1
 4,19,34,49 * * * * $SCRIPT_DIR/heartbeat-pixel.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/pixel.log 2>&1
 6,21,36,51 * * * * $SCRIPT_DIR/heartbeat-scout.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/scout.log 2>&1
+7,22,37,52 * * * * /home/n8garvie/.openclaw/workspace/mission-control/agents/archivist/heartbeat.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/archivist.log 2>&1
 8,23,38,53 * * * * $SCRIPT_DIR/heartbeat-forge.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/forge.log 2>&1
 10,25,40,55 * * * * $SCRIPT_DIR/heartbeat-lens.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/lens.log 2>&1
 12,27,42,57 * * * * $SCRIPT_DIR/heartbeat-echo.sh >> /home/n8garvie/.openclaw/workspace/mission-control/logs/echo.log 2>&1

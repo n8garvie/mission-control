@@ -9,7 +9,9 @@ Autonomous multi-agent product design studio. Each agent executes work between h
 | Muse | Creative Director | agent:creative:main | 🎨 | Creative briefs, brand direction |
 | Pixel | UI/Visual Designer | agent:designer:main | ✏️ | Design assets, UI mockups |
 | Scout | Researcher | agent:researcher:main | 🔍 | Market research, idea generation |
-| Forge | Engineer | agent:engineer:main | ⚡ | Code, deploy, ship features |
+| **Archivist** | **Knowledge Manager** | **agent:main** | **📚** | **Saves all research to wiki** |
+| Forge | Engineer | agent:engineer:main | ⚡ | Architecture, system design |
+| Integrator | Full-Stack Developer | agent:main | 🔧 | Combines all outputs into working code |
 | Lens | QA Engineer | agent:qa:main | 🔬 | Test, bug reports, quality sign-off |
 | Echo | Copywriter | agent:copy:main | ✍️ | Content, copy, documentation |
 | Amp | Marketer | agent:marketing:main | 📣 | Launch strategy, growth |
@@ -44,8 +46,10 @@ Muse → [creative brief]
   ↓ (brief complete)
 Pixel → [design assets]
   ↓ (designs ready)
-Forge → [engineering, deploy]
-  ↓ (build complete)
+Forge → [architecture, schema, API design]
+  ↓ (architecture complete)
+Integrator → [combines all outputs, writes working code]
+  ↓ (code complete)
 📸 Auto-Screenshot → [capture app, add to README, push to GitHub]
   ↓ (screenshot complete)
 Lens → [QA, testing]
@@ -55,12 +59,17 @@ Atlas → [marks done, deploys]
 Amp + Echo → [launch, marketing]
 ```
 
-### Auto-Screenshot Step (Every Build)
-After Forge completes a build, the system automatically:
-1. **Starts the dev server** on an available port
-2. **Captures a full-page screenshot** using Playwright
-3. **Adds screenshot to README.md** (after the title)
-4. **Commits and pushes to GitHub** with message "Add screenshot to README [Mission Control Auto]"
+### Auto-Screenshot Step (REQUIRED for every build)
+After Integrator completes a build, the system **MUST**:
+1. **Start the dev server** on an available port
+2. **Capture a full-page screenshot** using Playwright
+3. **Add screenshot to README.md** (after the title)
+4. **Commit and push to GitHub** with message "Add screenshot to README [Mission Control Auto]"
+
+**⚠️ MANDATORY: No build is complete without a screenshot in the README.**
+- The screenshot proves the app actually works
+- GitHub repos without screenshots are considered failed builds
+- Lens QA will reject builds without visual proof
 
 This ensures every project has visual documentation in the repo.
 
@@ -84,7 +93,8 @@ Agents execute their step automatically when work arrives in their queue.
 
 ### Quality Gates
 - Every deliverable linked in Mission Control
-- Lens QA required before "done"
+- **Screenshot in README is MANDATORY** — no exceptions
+- Lens QA required before "done" (includes screenshot verification)
 - Nathan approval for public launches
 - Document decisions in task comments
 
