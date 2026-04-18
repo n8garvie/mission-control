@@ -12,16 +12,15 @@ interface Idea {
   targetAudience: string;
   mvpScope: string;
   potential: "low" | "medium" | "high" | "moonshot";
-  status: "pending" | "approved" | "building" | "done";
+  pipelineStatus: "scouted" | "reviewing" | "approved" | "rejected" | "archived";
+  taskStatus: "backlog" | "inbox" | "assigned" | "in_progress" | "built" | "deployed" | "blocked";
+  buildStage?: "not_started" | "agents_spawning" | "agents_working" | "building_locally" | "pushing_to_github" | "deploying_to_vercel" | "completed" | "failed";
   createdAt: number;
   approvedAt?: number;
   deployedUrl?: string;
+  githubRepoUrl?: string;
   source?: string;
   tags?: string[];
-  // Deployment tracking
-  deploymentStatus?: "not_started" | "in_progress" | "github_created" | "vercel_deployed" | "failed";
-  githubRepoUrl?: string;
-  buildId?: string;
 }
 
 interface IdeaCardProps {
@@ -43,52 +42,56 @@ const potentialLabels = {
   moonshot: "🚀 Moonshot",
 };
 
-const statusConfig = {
-  pending: {
-    badge: "badge-pending",
-    label: "Pending",
-    icon: "⏳",
-    borderColor: "border-l-4 border-l-gray-400",
+const pipelineStatusConfig = {
+  scouted: {
+    badge: "bg-gray-100 text-gray-600",
+    label: "Scouted",
+    icon: "🔍",
+  },
+  reviewing: {
+    badge: "bg-blue-100 text-blue-600",
+    label: "Reviewing",
+    icon: "👀",
   },
   approved: {
-    badge: "badge-approved",
+    badge: "bg-green-100 text-green-600",
     label: "Approved",
     icon: "✅",
-    borderColor: "border-l-4 border-l-blue-500",
   },
-  building: {
-    badge: "badge-building",
-    label: "Building",
-    icon: "🔨",
-    borderColor: "border-l-4 border-l-amber-500",
+  rejected: {
+    badge: "bg-red-100 text-red-600",
+    label: "Rejected",
+    icon: "❌",
   },
-  done: {
-    badge: "badge-done",
-    label: "Agent Complete",
-    icon: "✨",
-    borderColor: "border-l-4 border-l-purple-500",
+  archived: {
+    badge: "bg-gray-100 text-gray-500",
+    label: "Archived",
+    icon: "📦",
   },
 };
 
-const deploymentStatusConfig = {
+const buildStageConfig: Record<string, { label: string; icon: string; color: string }> = {
   not_started: { label: "Not Started", icon: "⚪", color: "text-gray-400" },
-  in_progress: { label: "Deploying", icon: "🔄", color: "text-amber-500" },
-  github_created: { label: "On GitHub", icon: "📦", color: "text-blue-500" },
-  vercel_deployed: { label: "Live", icon: "🚀", color: "text-green-500" },
+  agents_spawning: { label: "Spawning Agents", icon: "🚀", color: "text-yellow-500" },
+  agents_working: { label: "Agents Working", icon: "🔨", color: "text-blue-500" },
+  building_locally: { label: "Building", icon: "💻", color: "text-purple-500" },
+  pushing_to_github: { label: "GitHub", icon: "📦", color: "text-indigo-500" },
+  deploying_to_vercel: { label: "Deploying", icon: "🚢", color: "text-orange-500" },
+  completed: { label: "Live", icon: "✅", color: "text-green-500" },
   failed: { label: "Failed", icon: "❌", color: "text-red-500" },
 };
 
 export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   const [isLoading, setIsLoading] = useState(false);
   const approveIdea = useMutation(api.ideas.approve);
-  const markBuilding = useMutation(api.ideas.markBuilding);
-  const markDone = useMutation(api.ideas.markDone);
+  const rejectIdea = useMutation(api.ideas.reject);
   const removeIdea = useMutation(api.ideas.remove);
 
-  const status = statusConfig[idea.status];
-  const deploymentStatus = idea.deploymentStatus 
-    ? deploymentStatusConfig[idea.deploymentStatus] 
-    : deploymentStatusConfig.not_started;
+  const status = pipelineStatusConfig[idea.pipelineStatus];
+  const buildStage = idea.buildStage 
+    ? buildStageConfig[idea.buildStage] 
+    : buildStageConfig.not_started;
+  
   const createdDate = new Date(idea.createdAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -97,10 +100,22 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   const handleApprove = async () => {
     setIsLoading(true);
     try {
-      await approveIdea({ ideaId: idea._id });
+      await approveIdea({ ideaId: idea._id, approvedBy: "nathan" });
       onAction?.();
     } catch (error) {
       console.error("Failed to approve idea:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleReject = async () => {
+    setIsLoading(true);
+    try {
+      await rejectIdea({ ideaId: idea._id, reason: "Rejected from dashboard" });
+      onAction?.();
+    } catch (error) {
+      console.error("Failed to reject idea:", error);
     } finally {
       setIsLoading(false);
     }
@@ -119,56 +134,73 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   };
 
   const getActionButton = () => {
-    switch (idea.status) {
-      case "pending":
+    switch (idea.pipelineStatus) {
+      case "scouted":
         return (
-          <button
-            onClick={handleApprove}
-            disabled={isLoading}
-            className="btn btn-primary text-sm w-full"
-          >
-            {isLoading ? "Approving..." : "✅ Approve & Build"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={handleApprove}
+              disabled={isLoading}
+              className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? "..." : "✓ Approve"}
+            </button>
+            <button
+              onClick={handleReject}
+              disabled={isLoading}
+              className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-50"
+            >
+              {isLoading ? "..." : "✕ Reject"}
+            </button>
+          </div>
         );
       case "approved":
         return (
-          <div className="flex items-center justify-center gap-2 text-sm text-blue-600 bg-blue-50 py-2 px-4 rounded">
-            <span>⏳ Queued for overnight build</span>
+          <div className="flex items-center justify-center gap-2 text-sm text-green-600 bg-green-50 py-2 px-4 rounded-lg">
+            <span>✓ Approved</span>
+            <span className="text-gray-400">|</span>
+            <span>Ready for Dashboard</span>
           </div>
         );
-      case "building":
+      case "rejected":
         return (
-          <div className="flex items-center justify-center gap-2 text-sm text-amber-600 bg-amber-50 py-2 px-4 rounded">
-            <span className="animate-pulse">🔨 Building...</span>
+          <div className="flex items-center justify-center gap-2 text-sm text-red-600 bg-red-50 py-2 px-4 rounded-lg">
+            <span>✕ Rejected</span>
           </div>
         );
-      case "done":
-        if (idea.deploymentStatus === "vercel_deployed" && idea.deployedUrl) {
+      case "archived":
+        return (
+          <div className="flex items-center justify-center gap-2 text-sm text-gray-600 bg-gray-100 py-2 px-4 rounded-lg">
+            <span>📦 Archived</span>
+          </div>
+        );
+      default:
+        if (idea.deployedUrl) {
           return (
             <a
               href={idea.deployedUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn btn-primary text-sm w-full text-center"
+              className="block w-full text-center px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors"
             >
               🚀 View Live Site
             </a>
           );
-        } else if (idea.deploymentStatus === "github_created" && idea.githubRepoUrl) {
+        } else if (idea.githubRepoUrl) {
           return (
             <a
               href={idea.githubRepoUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="btn btn-secondary text-sm w-full text-center"
+              className="block w-full text-center px-3 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition-colors"
             >
               📦 View on GitHub
             </a>
           );
         } else {
           return (
-            <div className="flex items-center justify-center gap-2 text-sm text-purple-600 bg-purple-50 py-2 px-4 rounded">
-              <span>✨ Agents finished — awaiting deployment</span>
+            <div className="flex items-center justify-center gap-2 text-sm text-purple-600 bg-purple-50 py-2 px-4 rounded-lg">
+              <span>{buildStage.icon} {buildStage.label}</span>
             </div>
           );
         }
@@ -176,36 +208,30 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   };
 
   return (
-    <div className={`card overflow-hidden ${status.borderColor}`}>
-      {/* Header */}
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
       <div className="p-5">
+        {/* Header */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`badge ${status.badge}`}>
+              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.badge}`}>
                 {status.icon} {status.label}
               </span>
-              {/* Deployment Status Badge */}
-              {idea.status !== "pending" && idea.status !== "approved" && (
-                <span className={`text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 ${deploymentStatus.color}`}>
-                  {deploymentStatus.icon} {deploymentStatus.label}
-                </span>
-              )}
               <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${potentialColors[idea.potential]}`}>
                 {potentialLabels[idea.potential]}
               </span>
               {idea.source && (
-                <span className="text-caption text-xs">
+                <span className="text-xs text-gray-500">
                   via {idea.source}
                 </span>
               )}
             </div>
-            <h3 className="heading-md text-base leading-tight">{idea.title}</h3>
+            <h3 className="font-semibold text-gray-900 leading-tight">{idea.title}</h3>
           </div>
           <button
             onClick={handleDelete}
             disabled={isLoading}
-            className="text-[var(--text-muted)] hover:text-[var(--error-500)] transition-colors p-1"
+            className="text-gray-400 hover:text-red-500 transition-colors p-1"
             title="Delete idea"
           >
             ✕
@@ -213,27 +239,27 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
         </div>
 
         {/* Description */}
-        <p className="text-body text-sm mb-4 line-clamp-3">{idea.description}</p>
+        <p className="text-sm text-gray-600 mb-4 line-clamp-3">{idea.description}</p>
 
         {/* Details */}
-        <div className="space-y-2 mb-4">
+        <div className="space-y-2 mb-4 text-sm">
           <div className="flex items-start gap-2">
-            <span className="text-caption text-xs uppercase w-24 flex-shrink-0">Target:</span>
-            <span className="text-small text-[var(--text-secondary)]">{idea.targetAudience}</span>
+            <span className="text-gray-400 w-20 flex-shrink-0">Target:</span>
+            <span className="text-gray-700">{idea.targetAudience}</span>
           </div>
           <div className="flex items-start gap-2">
-            <span className="text-caption text-xs uppercase w-24 flex-shrink-0">MVP Scope:</span>
-            <span className="text-small text-[var(--text-secondary)]">{idea.mvpScope}</span>
+            <span className="text-gray-400 w-20 flex-shrink-0">MVP:</span>
+            <span className="text-gray-700 line-clamp-2">{idea.mvpScope}</span>
           </div>
         </div>
 
         {/* Tags */}
         {idea.tags && idea.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-4">
-            {idea.tags.map((tag) => (
+            {idea.tags.slice(0, 5).map((tag) => (
               <span
                 key={tag}
-                className="text-xs bg-[var(--bg-tertiary)] text-[var(--text-tertiary)] px-2 py-0.5 rounded"
+                className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
               >
                 #{tag}
               </span>
@@ -241,32 +267,17 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
           </div>
         )}
 
-        {/* Deployed URL */}
-        {idea.deployedUrl && (
-          <div className="mb-4 p-2 bg-[var(--success-50)] rounded border border-[var(--success-500)] border-opacity-20">
-            <span className="text-caption text-xs block mb-1">Deployed to:</span>
-            <a
-              href={idea.deployedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-[var(--accent-600)] hover:underline truncate block"
-            >
-              {idea.deployedUrl}
-            </a>
-          </div>
-        )}
-
         {/* Action Button */}
-        <div className="pt-3 border-t border-[var(--border-light)]">
+        <div className="pt-3 border-t border-gray-100">
           {getActionButton()}
         </div>
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-3 bg-[var(--bg-tertiary)] border-t border-[var(--border-light)] flex items-center justify-between">
-        <span className="text-caption text-xs">Scouted {createdDate}</span>
+      <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+        <span>Scouted {createdDate}</span>
         {idea.approvedAt && (
-          <span className="text-caption text-xs">
+          <span>
             Approved {new Date(idea.approvedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
           </span>
         )}

@@ -7,22 +7,29 @@ export default defineSchema({
     name: v.string(),
     role: v.string(),
     emoji: v.string(),
-    sessionKey: v.string(),
+    sessionKey: v.optional(v.string()),
     status: v.union(
       v.literal("idle"),
-      v.literal("active"),
-      v.literal("blocked")
+      v.literal("working"),
+      v.literal("blocked"),
+      v.literal("offline")
     ),
     currentTaskId: v.optional(v.id("tasks")),
+    currentIdeaId: v.optional(v.id("ideas")),
     lastHeartbeat: v.optional(v.number()),
     level: v.union(
       v.literal("intern"),
       v.literal("specialist"),
       v.literal("lead")
     ),
+    skills: v.array(v.string()),
+    canScout: v.boolean(),
+    canBuild: v.boolean(),
+    tasksCompleted: v.optional(v.number()),
+    ideasScouted: v.optional(v.number()),
   }).index("by_session", ["sessionKey"]),
 
-  // Task board
+  // Task board (for non-idea tasks)
   tasks: defineTable({
     title: v.string(),
     description: v.string(),
@@ -84,20 +91,32 @@ export default defineSchema({
       v.literal("agent_heartbeat"),
       v.literal("project_created"),
       v.literal("status_change"),
-      v.literal("idea_created"),
+      v.literal("idea_scouted"),
       v.literal("idea_approved"),
-      v.literal("idea_building"),
-      v.literal("idea_deployed"),
-      v.literal("idea_deleted"),
-      v.literal("idea_reset")
+      v.literal("idea_rejected"),
+      v.literal("idea_archived"),
+      v.literal("build_started"),
+      v.literal("build_stage_changed"),
+      v.literal("agent_spawn_started"),
+      v.literal("agent_spawn_completed"),
+      v.literal("agent_spawn_failed"),
+      v.literal("agent_spawn_manual_required"),
+      v.literal("agent_output_received"),
+      v.literal("build_locally_completed"),
+      v.literal("github_pushed"),
+      v.literal("vercel_deployed"),
+      v.literal("build_failed")
     ),
     agentId: v.optional(v.id("agents")),
-    agent: v.optional(v.any()), // TEMP: for backward compat with old data
+    agentName: v.optional(v.string()),
     taskId: v.optional(v.id("tasks")),
+    ideaId: v.optional(v.id("ideas")),
     projectId: v.optional(v.id("projects")),
     message: v.string(),
-    createdAt: v.optional(v.number()), // TEMP: for backward compat
-  }).index("by_type", ["type"]),
+    metadata: v.optional(v.any()),
+    createdAt: v.optional(v.number()),
+  }).index("by_type", ["type"])
+    .index("by_idea", ["ideaId"]),
 
   // Documents and deliverables
   documents: defineTable({
@@ -130,46 +149,134 @@ export default defineSchema({
   }).index("by_agent", ["mentionedAgentId"])
     .index("by_undelivered", ["delivered"]),
 
-  // Ideas pipeline - for Nightly Idea Pipeline system
+  // UNIFIED: Ideas pipeline + Mission Control task system
   ideas: defineTable({
+    // Basic info
     title: v.string(),
     description: v.string(),
+    problem: v.optional(v.string()),
+    solution: v.optional(v.string()),
     targetAudience: v.string(),
     mvpScope: v.string(),
+    
+    // Categorization
+    tags: v.array(v.string()),
+    category: v.union(
+      v.literal("saas"),
+      v.literal("developer-tools"),
+      v.literal("productivity"),
+      v.literal("ai"),
+      v.literal("other")
+    ),
     potential: v.union(
       v.literal("low"),
       v.literal("medium"),
       v.literal("high"),
       v.literal("moonshot")
     ),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("approved"),
-      v.literal("building"),
-      v.literal("done")
+    
+    // Discovery metadata
+    source: v.union(v.literal("scout"), v.literal("manual"), v.literal("agent")),
+    scoutedBy: v.string(),
+    scoutedAt: v.number(),
+    discoverySource: v.union(
+      v.literal("hn"),
+      v.literal("reddit"),
+      v.literal("twitter"),
+      v.literal("manual"),
+      v.literal("agent")
     ),
-    createdAt: v.number(),
+    discoveryUrl: v.optional(v.string()),
+    discoveryContext: v.optional(v.string()),
+    
+    // Pipeline workflow (for Pipeline UI)
+    pipelineStatus: v.union(
+      v.literal("scouted"),
+      v.literal("reviewing"),
+      v.literal("approved"),
+      v.literal("rejected"),
+      v.literal("archived")
+    ),
     approvedAt: v.optional(v.number()),
-    deployedUrl: v.optional(v.string()),
-    source: v.optional(v.string()), // e.g., "reddit", "producthunt", "scout"
-    tags: v.optional(v.array(v.string())),
-    scoutAgentId: v.optional(v.id("agents")),
-    // Deployment tracking fields
-    deploymentStatus: v.optional(v.union(
-      v.literal("not_started"),
+    approvedBy: v.optional(v.string()),
+    
+    // Execution workflow (for Dashboard UI)
+    taskStatus: v.union(
+      v.literal("backlog"),
+      v.literal("inbox"),
+      v.literal("assigned"),
       v.literal("in_progress"),
-      v.literal("github_created"),
-      v.literal("vercel_deployed"),
+      v.literal("built"),
+      v.literal("deployed"),
+      v.literal("blocked")
+    ),
+    priority: v.union(
+      v.literal("critical"),
+      v.literal("high"),
+      v.literal("medium"),
+      v.literal("low")
+    ),
+    
+    // Assignment
+    assignedAgents: v.array(v.id("agents")),
+    squadLead: v.optional(v.id("agents")),
+    
+    // Build tracking (granular stages)
+    buildStage: v.union(
+      v.literal("not_started"),
+      v.literal("agents_spawning"),
+      v.literal("agents_working"),
+      v.literal("building_locally"),
+      v.literal("pushing_to_github"),
+      v.literal("deploying_to_vercel"),
+      v.literal("completed"),
       v.literal("failed")
-    )),
-    githubRepoUrl: v.optional(v.string()),
+    ),
     buildId: v.optional(v.string()),
     buildStartedAt: v.optional(v.number()),
     buildCompletedAt: v.optional(v.number()),
-  }).index("by_status", ["status"])
+    buildFailedAt: v.optional(v.number()),
+    buildError: v.optional(v.string()),
+    
+    // Agent spawning tracking (per-agent status)
+    agentSpawns: v.optional(v.array(v.object({
+      agentId: v.string(),
+      agentName: v.string(),
+      status: v.union(
+        v.literal("pending"),
+        v.literal("spawning"),
+        v.literal("spawned"),
+        v.literal("working"),
+        v.literal("completed"),
+        v.literal("failed"),
+        v.literal("manual_intervention_required")
+      ),
+      spawnCommand: v.optional(v.string()),
+      sessionKey: v.optional(v.string()),
+      spawnStartedAt: v.optional(v.number()),
+      spawnCompletedAt: v.optional(v.number()),
+      spawnFailedAt: v.optional(v.number()),
+      spawnError: v.optional(v.string()),
+      lastHeartbeatAt: v.optional(v.number()),
+      outputLocation: v.optional(v.string()),
+    }))),
+    
+    // Output tracking
+    outputLocation: v.optional(v.string()),
+    githubRepoUrl: v.optional(v.string()),
+    githubPushedAt: v.optional(v.number()),
+    deployedUrl: v.optional(v.string()),
+    deployedAt: v.optional(v.number()),
+    
+    // Activity timestamps
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    lastActivityAt: v.number(),
+  }).index("by_pipeline_status", ["pipelineStatus"])
+    .index("by_task_status", ["taskStatus"])
+    .index("by_build_stage", ["buildStage"])
     .index("by_potential", ["potential"])
-    .index("by_created", ["createdAt"])
-    .index("by_deployment_status", ["deploymentStatus"]),
+    .index("by_created", ["createdAt"]),
 
   // Rejected/deleted ideas - to prevent duplicates
   rejectedIdeas: defineTable({
@@ -180,39 +287,7 @@ export default defineSchema({
   }).index("by_title", ["title"])
     .index("by_rejected", ["rejectedAt"]),
 
-  // AI Subscription Optimizer tables
-  subscriptions: defineTable({
-    name: v.string(),
-    provider: v.string(),
-    cost: v.number(),
-    billingCycle: v.union(v.literal("monthly"), v.literal("yearly")),
-    usage: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
-    renewalDate: v.string(),
-    category: v.string(),
-    iconName: v.string(),
-    description: v.optional(v.string()),
-    websiteUrl: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_provider", ["provider"])
-    .index("by_category", ["category"])
-    .index("by_renewal_date", ["renewalDate"]),
-
-  usageWindows: defineTable({
-    subscriptionId: v.id("subscriptions"),
-    name: v.string(),
-    durationMs: v.number(),
-    used: v.number(),
-    limit: v.number(),
-    unit: v.string(),
-    resetAt: v.number(),
-    createdAt: v.number(),
-  })
-    .index("by_subscription", ["subscriptionId"]),
-
-  // Dashboard stats - synced from local build system
+  // Dashboard stats
   dashboardStats: defineTable({
     activeAgents: v.number(),
     openTasks: v.number(),
@@ -220,7 +295,6 @@ export default defineSchema({
     pendingIdeas: v.number(),
     totalBuilds: v.number(),
     runningBuilds: v.optional(v.number()),
-    // Pipeline stages
     pipeline: v.optional(v.object({
       buildsStarted: v.number(),
       buildsWithCode: v.number(),
@@ -235,37 +309,4 @@ export default defineSchema({
     }),
     lastUpdated: v.number(),
   }),
-
-  // Build tracking - stores actual build pipeline status
-  builds: defineTable({
-    ideaId: v.optional(v.id("ideas")),
-    buildId: v.string(), // e.g., k175fja4ncy54132ag0tnava6h851mct
-    title: v.string(),
-    description: v.optional(v.string()),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("building"),
-      v.literal("agent_complete"),
-      v.literal("github_pushed"),
-      v.literal("vercel_deployed"),
-      v.literal("failed")
-    ),
-    stage: v.number(), // 0-5
-    potential: v.optional(v.union(v.literal("low"), v.literal("medium"), v.literal("high"), v.literal("moonshot"))),
-    githubUrl: v.optional(v.string()),
-    vercelUrl: v.optional(v.string()),
-    startedAt: v.number(),
-    completedAt: v.optional(v.number()),
-    // Agent tracking
-    agents: v.optional(v.object({
-      forge: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
-      pixel: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
-      echo: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
-      integrator: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
-      lens: v.optional(v.union(v.literal("pending"), v.literal("running"), v.literal("complete"), v.literal("failed"))),
-    })),
-  })
-    .index("by_status", ["status"])
-    .index("by_idea", ["ideaId"])
-    .index("by_build_id", ["buildId"]),
 });

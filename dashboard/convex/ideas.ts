@@ -2,31 +2,59 @@ import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { Id } from "./_generated/dataModel";
 
-// List all ideas
-export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    const ideas = await ctx.db.query("ideas").order("desc").collect();
-    return ideas;
-  },
-});
+// ============== PIPELINE VIEW QUERIES ==============
 
-// List ideas by status
-export const listByStatus = query({
+// List ideas by pipeline status (for Pipeline UI)
+export const listByPipelineStatus = query({
   args: {
     status: v.union(
-      v.literal("pending"),
+      v.literal("scouted"),
+      v.literal("reviewing"),
       v.literal("approved"),
-      v.literal("building"),
-      v.literal("done")
+      v.literal("rejected"),
+      v.literal("archived")
     ),
   },
   handler: async (ctx, args) => {
     const ideas = await ctx.db
       .query("ideas")
-      .withIndex("by_status", (q) => q.eq("status", args.status))
+      .withIndex("by_pipeline_status", (q) => q.eq("pipelineStatus", args.status))
       .order("desc")
       .collect();
+    return ideas;
+  },
+});
+
+// ============== DASHBOARD VIEW QUERIES ==============
+
+// List ideas by task status (for Dashboard Kanban)
+export const listByTaskStatus = query({
+  args: {
+    status: v.union(
+      v.literal("backlog"),
+      v.literal("inbox"),
+      v.literal("assigned"),
+      v.literal("in_progress"),
+      v.literal("built"),
+      v.literal("deployed"),
+      v.literal("blocked")
+    ),
+  },
+  handler: async (ctx, args) => {
+    const ideas = await ctx.db
+      .query("ideas")
+      .withIndex("by_task_status", (q) => q.eq("taskStatus", args.status))
+      .order("desc")
+      .collect();
+    return ideas;
+  },
+});
+
+// List all ideas (for admin/debug)
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    const ideas = await ctx.db.query("ideas").order("desc").collect();
     return ideas;
   },
 });
@@ -40,31 +68,7 @@ export const get = query({
   },
 });
 
-// Get pending ideas (for scout agent)
-export const getPending = query({
-  args: {},
-  handler: async (ctx) => {
-    const ideas = await ctx.db
-      .query("ideas")
-      .withIndex("by_status", (q) => q.eq("status", "pending"))
-      .order("desc")
-      .collect();
-    return ideas;
-  },
-});
-
-// Get approved ideas ready for building
-export const getApproved = query({
-  args: {},
-  handler: async (ctx) => {
-    const ideas = await ctx.db
-      .query("ideas")
-      .withIndex("by_status", (q) => q.eq("status", "approved"))
-      .order("desc")
-      .take(5);
-    return ideas;
-  },
-});
+// ============== PIPELINE ACTIONS ==============
 
 // Create a new idea (used by Scout agent)
 export const create = mutation({
@@ -79,133 +83,97 @@ export const create = mutation({
       v.literal("high"),
       v.literal("moonshot")
     ),
-    source: v.optional(v.string()),
+    problem: v.optional(v.string()),
+    solution: v.optional(v.string()),
     tags: v.optional(v.array(v.string())),
-    scoutAgentId: v.optional(v.id("agents")),
+    category: v.optional(v.union(
+      v.literal("saas"),
+      v.literal("developer-tools"),
+      v.literal("productivity"),
+      v.literal("ai"),
+      v.literal("other")
+    )),
+    discoverySource: v.optional(v.union(
+      v.literal("hn"),
+      v.literal("reddit"),
+      v.literal("twitter"),
+      v.literal("manual"),
+      v.literal("agent")
+    )),
+    discoveryUrl: v.optional(v.string()),
+    discoveryContext: v.optional(v.string()),
+    scoutedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
     const ideaId = await ctx.db.insert("ideas", {
       ...args,
-      status: "pending",
-      createdAt: Date.now(),
+      source: "scout",
+      scoutedBy: args.scoutedBy || "scout",
+      scoutedAt: now,
+      pipelineStatus: "scouted",
+      taskStatus: "backlog",
+      priority: "medium",
+      tags: args.tags || [],
+      category: args.category || "other",
+      discoverySource: args.discoverySource || "manual",
+      buildStage: "not_started",
+      assignedAgents: [],
+      agentSpawns: [],
+      createdAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
     });
 
     // Log activity
     await ctx.db.insert("activities", {
-      type: "idea_created",
+      type: "idea_scouted",
+      ideaId,
       message: `💡 New idea scouted: ${args.title}`,
+      createdAt: now,
     });
 
     return ideaId;
   },
 });
 
-// Approve an idea and prepare for building
+// Approve an idea (moves from Pipeline to Dashboard)
 export const approve = mutation({
   args: {
     ideaId: v.id("ideas"),
+    approvedBy: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const idea = await ctx.db.get(args.ideaId);
     if (!idea) throw new Error("Idea not found");
-    if (idea.status !== "pending") throw new Error("Idea must be pending to approve");
+    if (idea.pipelineStatus !== "scouted" && idea.pipelineStatus !== "reviewing") {
+      throw new Error("Idea must be scouted or reviewing to approve");
+    }
 
+    const now = Date.now();
     await ctx.db.patch(args.ideaId, {
-      status: "approved",
-      approvedAt: Date.now(),
+      pipelineStatus: "approved",
+      taskStatus: "backlog",
+      approvedAt: now,
+      approvedBy: args.approvedBy || "nathan",
+      updatedAt: now,
+      lastActivityAt: now,
     });
 
     // Log activity
     await ctx.db.insert("activities", {
       type: "idea_approved",
+      ideaId: args.ideaId,
       message: `✅ Idea approved for building: ${idea.title}`,
+      createdAt: now,
     });
 
     return args.ideaId;
   },
 });
 
-// Mark idea as building (overnight build started)
-export const markBuilding = mutation({
-  args: {
-    ideaId: v.id("ideas"),
-  },
-  handler: async (ctx, args) => {
-    const idea = await ctx.db.get(args.ideaId);
-    if (!idea) throw new Error("Idea not found");
-    if (idea.status !== "approved") throw new Error("Idea must be approved before building");
-
-    await ctx.db.patch(args.ideaId, {
-      status: "building",
-    });
-
-    // Log activity
-    await ctx.db.insert("activities", {
-      type: "idea_building",
-      message: `🔨 Build started for: ${idea.title}`,
-    });
-
-    return args.ideaId;
-  },
-});
-
-// Mark idea as done (deployment complete)
-export const markDone = mutation({
-  args: {
-    ideaId: v.id("ideas"),
-    deployedUrl: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const idea = await ctx.db.get(args.ideaId);
-    if (!idea) throw new Error("Idea not found");
-    if (idea.status !== "building") throw new Error("Idea must be building to mark done");
-
-    await ctx.db.patch(args.ideaId, {
-      status: "done",
-      deployedUrl: args.deployedUrl,
-    });
-
-    // Log activity
-    await ctx.db.insert("activities", {
-      type: "idea_deployed",
-      message: `🚀 Deployed: ${idea.title}${args.deployedUrl ? ` - ${args.deployedUrl}` : ""}`,
-    });
-
-    return args.ideaId;
-  },
-});
-
-// Update idea (general updates)
-export const update = mutation({
-  args: {
-    ideaId: v.id("ideas"),
-    title: v.optional(v.string()),
-    description: v.optional(v.string()),
-    targetAudience: v.optional(v.string()),
-    mvpScope: v.optional(v.string()),
-    potential: v.optional(
-      v.union(
-        v.literal("low"),
-        v.literal("medium"),
-        v.literal("high"),
-        v.literal("moonshot")
-      )
-    ),
-    tags: v.optional(v.array(v.string())),
-  },
-  handler: async (ctx, args) => {
-    const { ideaId, ...updates } = args;
-    const idea = await ctx.db.get(ideaId);
-    if (!idea) throw new Error("Idea not found");
-
-    await ctx.db.patch(ideaId, updates);
-
-    return ideaId;
-  },
-});
-
-// Delete an idea (and add to rejected list to prevent duplicates)
-export const remove = mutation({
+// Reject an idea
+export const reject = mutation({
   args: {
     ideaId: v.id("ideas"),
     reason: v.optional(v.string()),
@@ -214,23 +182,433 @@ export const remove = mutation({
     const idea = await ctx.db.get(args.ideaId);
     if (!idea) throw new Error("Idea not found");
 
-    // Save to rejected ideas list to prevent future duplicates
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      pipelineStatus: "rejected",
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Also add to rejected ideas list to prevent duplicates
     await ctx.db.insert("rejectedIdeas", {
       title: idea.title,
       description: idea.description,
-      rejectedAt: Date.now(),
+      rejectedAt: now,
       reason: args.reason,
     });
 
-    await ctx.db.delete(args.ideaId);
-
     // Log activity
     await ctx.db.insert("activities", {
-      type: "idea_deleted",
-      message: `🗑️ Idea removed: ${idea.title}`,
+      type: "idea_rejected",
+      ideaId: args.ideaId,
+      message: `❌ Idea rejected: ${idea.title}${args.reason ? ` - ${args.reason}` : ""}`,
+      createdAt: now,
     });
 
     return args.ideaId;
+  },
+});
+
+// Archive an idea
+export const archive = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      pipelineStatus: "archived",
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "idea_archived",
+      ideaId: args.ideaId,
+      message: `📦 Idea archived: ${idea.title}`,
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// ============== DASHBOARD ACTIONS ==============
+
+// Assign agents to an idea
+export const assignAgents = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    agentIds: v.array(v.id("agents")),
+    squadLead: v.optional(v.id("agents")),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    
+    // Initialize agentSpawns for each assigned agent
+    const agentSpawns = args.agentIds.map((agentId) => ({
+      agentId: agentId.toString(),
+      agentName: "", // Will be populated when we fetch agent
+      status: "pending" as const,
+    }));
+
+    await ctx.db.patch(args.ideaId, {
+      assignedAgents: args.agentIds,
+      squadLead: args.squadLead,
+      taskStatus: "assigned",
+      agentSpawns,
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "build_started",
+      ideaId: args.ideaId,
+      message: `👥 Agents assigned to: ${idea.title}`,
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// ============== BUILD STAGE TRACKING ==============
+
+// Start build (initialize agent spawning)
+export const startBuild = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    buildId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      buildId: args.buildId,
+      buildStage: "agents_spawning",
+      taskStatus: "in_progress",
+      buildStartedAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "build_started",
+      ideaId: args.ideaId,
+      message: `🔨 Build started for: ${idea.title}`,
+      metadata: { buildId: args.buildId },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// Update build stage
+export const updateBuildStage = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    stage: v.union(
+      v.literal("not_started"),
+      v.literal("agents_spawning"),
+      v.literal("agents_working"),
+      v.literal("building_locally"),
+      v.literal("pushing_to_github"),
+      v.literal("deploying_to_vercel"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    metadata: v.optional(v.any()),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      buildStage: args.stage,
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "build_stage_changed",
+      ideaId: args.ideaId,
+      message: `📊 Build stage: ${args.stage.replace(/_/g, " ")}`,
+      metadata: { stage: args.stage, ...args.metadata },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// Update agent spawn status
+export const updateAgentSpawn = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    agentId: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("spawning"),
+      v.literal("spawned"),
+      v.literal("working"),
+      v.literal("completed"),
+      v.literal("failed"),
+      v.literal("manual_intervention_required")
+    ),
+    sessionKey: v.optional(v.string()),
+    spawnCommand: v.optional(v.string()),
+    error: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    const agentSpawns = idea.agentSpawns || [];
+    
+    const existingSpawnIndex = agentSpawns.findIndex(
+      (s: any) => s.agentId === args.agentId
+    );
+
+    const updatedSpawn = {
+      agentId: args.agentId,
+      agentName: existingSpawnIndex >= 0 ? agentSpawns[existingSpawnIndex].agentName : "",
+      status: args.status,
+      sessionKey: args.sessionKey,
+      spawnCommand: args.spawnCommand,
+      spawnError: args.error,
+      ...(args.status === "spawning" && { spawnStartedAt: now }),
+      ...(args.status === "spawned" && { spawnCompletedAt: now }),
+      ...(args.status === "failed" && { spawnFailedAt: now }),
+      ...(args.status === "manual_intervention_required" && { spawnFailedAt: now }),
+      lastHeartbeatAt: now,
+    };
+
+    if (existingSpawnIndex >= 0) {
+      agentSpawns[existingSpawnIndex] = { ...agentSpawns[existingSpawnIndex], ...updatedSpawn };
+    } else {
+      agentSpawns.push(updatedSpawn);
+    }
+
+    await ctx.db.patch(args.ideaId, {
+      agentSpawns,
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity based on status
+    const activityType = 
+      args.status === "spawning" ? "agent_spawn_started" :
+      args.status === "spawned" ? "agent_spawn_completed" :
+      args.status === "failed" ? "agent_spawn_failed" :
+      args.status === "manual_intervention_required" ? "agent_spawn_manual_required" :
+      "agent_heartbeat";
+
+    await ctx.db.insert("activities", {
+      type: activityType,
+      ideaId: args.ideaId,
+      agentId: args.agentId as Id<"agents">,
+      message: 
+        args.status === "spawning" ? `🚀 Spawning agent: ${args.agentId}` :
+        args.status === "spawned" ? `✅ Agent spawned: ${args.agentId}` :
+        args.status === "failed" ? `❌ Agent spawn failed: ${args.agentId}` :
+        args.status === "manual_intervention_required" ? `⚠️ Manual spawn required: ${args.agentId}` :
+        `💓 Agent heartbeat: ${args.agentId}`,
+      metadata: { 
+        agentId: args.agentId, 
+        status: args.status,
+        spawnCommand: args.spawnCommand,
+        error: args.error,
+      },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// Complete local build
+export const completeLocalBuild = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    outputLocation: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      buildStage: "pushing_to_github",
+      outputLocation: args.outputLocation,
+      taskStatus: "built",
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "build_locally_completed",
+      ideaId: args.ideaId,
+      message: `💻 Build completed locally: ${idea.title}`,
+      metadata: { outputLocation: args.outputLocation },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// Push to GitHub
+export const pushToGitHub = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    repoUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      buildStage: "deploying_to_vercel",
+      githubRepoUrl: args.repoUrl,
+      githubPushedAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "github_pushed",
+      ideaId: args.ideaId,
+      message: `📤 Pushed to GitHub: ${args.repoUrl}`,
+      metadata: { githubRepoUrl: args.repoUrl },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// Deploy to Vercel
+export const deployToVercel = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    deployedUrl: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      buildStage: "completed",
+      deployedUrl: args.deployedUrl,
+      deployedAt: now,
+      taskStatus: "deployed",
+      buildCompletedAt: now,
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "vercel_deployed",
+      ideaId: args.ideaId,
+      message: `🚀 Deployed to Vercel: ${args.deployedUrl}`,
+      metadata: { deployedUrl: args.deployedUrl },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// Fail build
+export const failBuild = mutation({
+  args: {
+    ideaId: v.id("ideas"),
+    error: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
+
+    const now = Date.now();
+    await ctx.db.patch(args.ideaId, {
+      buildStage: "failed",
+      buildError: args.error,
+      buildFailedAt: now,
+      taskStatus: "blocked",
+      updatedAt: now,
+      lastActivityAt: now,
+    });
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "build_failed",
+      ideaId: args.ideaId,
+      message: `💥 Build failed: ${idea.title} - ${args.error}`,
+      metadata: { error: args.error },
+      createdAt: now,
+    });
+
+    return args.ideaId;
+  },
+});
+
+// ============== UTILITY FUNCTIONS ==============
+
+// Get ideas stats
+export const getStats = query({
+  args: {},
+  handler: async (ctx) => {
+    const allIdeas = await ctx.db.query("ideas").collect();
+    
+    return {
+      total: allIdeas.length,
+      pipeline: {
+        scouted: allIdeas.filter(i => i.pipelineStatus === "scouted").length,
+        reviewing: allIdeas.filter(i => i.pipelineStatus === "reviewing").length,
+        approved: allIdeas.filter(i => i.pipelineStatus === "approved").length,
+        rejected: allIdeas.filter(i => i.pipelineStatus === "rejected").length,
+        archived: allIdeas.filter(i => i.pipelineStatus === "archived").length,
+      },
+      dashboard: {
+        backlog: allIdeas.filter(i => i.taskStatus === "backlog").length,
+        inbox: allIdeas.filter(i => i.taskStatus === "inbox").length,
+        assigned: allIdeas.filter(i => i.taskStatus === "assigned").length,
+        inProgress: allIdeas.filter(i => i.taskStatus === "in_progress").length,
+        built: allIdeas.filter(i => i.taskStatus === "built").length,
+        deployed: allIdeas.filter(i => i.taskStatus === "deployed").length,
+        blocked: allIdeas.filter(i => i.taskStatus === "blocked").length,
+      },
+      buildStages: {
+        notStarted: allIdeas.filter(i => i.buildStage === "not_started").length,
+        agentsSpawning: allIdeas.filter(i => i.buildStage === "agents_spawning").length,
+        agentsWorking: allIdeas.filter(i => i.buildStage === "agents_working").length,
+        buildingLocally: allIdeas.filter(i => i.buildStage === "building_locally").length,
+        pushingToGitHub: allIdeas.filter(i => i.buildStage === "pushing_to_github").length,
+        deployingToVercel: allIdeas.filter(i => i.buildStage === "deploying_to_vercel").length,
+        completed: allIdeas.filter(i => i.buildStage === "completed").length,
+        failed: allIdeas.filter(i => i.buildStage === "failed").length,
+      },
+    };
   },
 });
 
@@ -260,23 +638,7 @@ export const listRejected = query({
   },
 });
 
-// Get ideas stats
-export const getStats = query({
-  args: {},
-  handler: async (ctx) => {
-    const allIdeas = await ctx.db.query("ideas").collect();
-    
-    return {
-      total: allIdeas.length,
-      pending: allIdeas.filter(i => i.status === "pending").length,
-      approved: allIdeas.filter(i => i.status === "approved").length,
-      building: allIdeas.filter(i => i.status === "building").length,
-      done: allIdeas.filter(i => i.status === "done").length,
-    };
-  },
-});
-
-// Reset building idea back to approved (for stuck builds)
+// Reset idea to approved (for stuck builds)
 export const resetToApproved = mutation({
   args: {
     ideaId: v.id("ideas"),
@@ -285,58 +647,61 @@ export const resetToApproved = mutation({
     const idea = await ctx.db.get(args.ideaId);
     if (!idea) throw new Error("Idea not found");
 
+    const now = Date.now();
     await ctx.db.patch(args.ideaId, {
-      status: "approved",
+      pipelineStatus: "approved",
+      taskStatus: "backlog",
+      buildStage: "not_started",
+      buildId: undefined,
+      buildError: undefined,
+      agentSpawns: [],
+      updatedAt: now,
+      lastActivityAt: now,
     });
 
     // Log activity
     await ctx.db.insert("activities", {
-      type: "idea_reset",
+      type: "status_change",
+      ideaId: args.ideaId,
       message: `↩️ Reset to approved: ${idea.title}`,
+      createdAt: now,
     });
 
     return args.ideaId;
   },
 });
 
-// Update deployment status (called by sync script)
-export const updateDeployment = mutation({
+// Delete an idea (and add to rejected list)
+export const remove = mutation({
   args: {
-    ideaId: v.string(),
-    deploymentStatus: v.union(
-      v.literal("not_started"),
-      v.literal("in_progress"),
-      v.literal("github_created"),
-      v.literal("vercel_deployed"),
-      v.literal("failed")
-    ),
-    githubRepoUrl: v.optional(v.string()),
-    deployedUrl: v.optional(v.string()),
-    buildId: v.optional(v.string()),
+    ideaId: v.id("ideas"),
+    reason: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // Find idea by build ID or ID
-    let idea: any = await ctx.db.get(args.ideaId as Id<"ideas">);
-    
-    // If not found by ID, try to find by buildId
-    if (!idea && args.buildId) {
-      const allIdeas = await ctx.db.query("ideas").collect();
-      idea = allIdeas.find((i: any) => i.buildId === args.buildId);
-    }
+    const idea = await ctx.db.get(args.ideaId);
+    if (!idea) throw new Error("Idea not found");
 
-    if (!idea) {
-      console.log(`Idea not found: ${args.ideaId}`);
-      return null;
-    }
+    const now = Date.now();
 
-    await ctx.db.patch(idea._id, {
-      deploymentStatus: args.deploymentStatus,
-      githubRepoUrl: args.githubRepoUrl,
-      deployedUrl: args.deployedUrl,
-      buildId: args.buildId,
+    // Save to rejected ideas list to prevent future duplicates
+    await ctx.db.insert("rejectedIdeas", {
+      title: idea.title,
+      description: idea.description,
+      rejectedAt: now,
+      reason: args.reason,
     });
 
-    return idea._id;
+    await ctx.db.delete(args.ideaId);
+
+    // Log activity
+    await ctx.db.insert("activities", {
+      type: "idea_rejected",
+      ideaId: args.ideaId,
+      message: `🗑️ Idea removed: ${idea.title}`,
+      createdAt: now,
+    });
+
+    return args.ideaId;
   },
 });
 

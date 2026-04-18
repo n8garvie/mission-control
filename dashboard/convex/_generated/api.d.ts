@@ -18,7 +18,6 @@ import type * as messages from "../messages.js";
 import type * as notifications from "../notifications.js";
 import type * as seed from "../seed.js";
 import type * as stats from "../stats.js";
-import type * as subscriptions from "../subscriptions.js";
 import type * as tasks from "../tasks.js";
 import type * as testTask from "../testTask.js";
 
@@ -39,7 +38,6 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   seed: typeof seed;
   stats: typeof stats;
-  subscriptions: typeof subscriptions;
   tasks: typeof tasks;
   testTask: typeof testTask;
 }>;
