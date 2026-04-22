@@ -212,7 +212,7 @@ mission-control/
 ### View Dashboard
 ```bash
 # Production
-open https://dashboard-khaki-mu-13.vercel.app
+open https://mission-control-n8garvie.vercel.app
 
 # Local
 npm run dev
