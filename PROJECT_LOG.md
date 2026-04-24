@@ -184,3 +184,55 @@ vercel remove mission-control-n8garvie --yes
 1. Assign agents to approved ideas to start building
 2. Monitor build progress in unified pipeline
 3. Review new ideas when nightly scout runs
+
+---
+
+## April 24, 2026 - Convex Database Mismatch Fix (CRITICAL)
+
+### Problem
+Dashboard was showing **83 ideas** (from dev database) instead of **21 ideas** (from production database).
+- Pipeline showed: 0 scouted, 0 approved, 0 in progress
+- Ideas page showed: 83 total ideas
+- All ideas displayed were from wrong database (Claude Codex Bridge, Hockey Terminal, etc.)
+
+### Root Cause
+Vercel deployment was connected to **wrong Convex database**:
+- **Wrong:** `beloved-giraffe-115` (dev deployment) - 83 ideas
+- **Correct:** `flexible-newt-666` (prod deployment) - 21 ideas
+
+The `NEXT_PUBLIC_CONVEX_URL` environment variable was baked into JavaScript at build time, so even after updating env vars, old URL persisted in compiled code.
+
+### Solution Applied
+```bash
+# 1. Update Vercel environment variables
+cd dashboard
+vercel env rm NEXT_PUBLIC_CONVEX_URL production --yes
+vercel env add NEXT_PUBLIC_CONVEX_URL production "https://flexible-newt-666.convex.cloud"
+vercel env rm CONVEX_DEPLOYMENT production --yes
+vercel env add CONVEX_DEPLOYMENT production "prod:flexible-newt-666"
+vercel env rm NEXT_PUBLIC_CONVEX_SITE_URL production --yes
+vercel env add NEXT_PUBLIC_CONVEX_SITE_URL production "https://flexible-newt-666.convex.site"
+
+# 2. Clear build cache and force complete rebuild
+rm -rf .next
+vercel deploy --prod --force
+
+# 3. Reassign alias to new deployment
+vercel alias set dashboard-dia3wexmx-n8garvies-projects.vercel.app mission-control-n8garvie-woad.vercel.app
+```
+
+### Files Updated
+- `ARCHITECTURE.md` - Added troubleshooting section for this issue
+- `PROJECT_LOG.md` - This entry
+
+### Current Status (Post-Fix)
+✅ Dashboard shows correct **21 ideas**
+✅ Pipeline shows correct counts: 6 approved, 6 rejected, 9 scouted
+✅ Connected to production Convex: `flexible-newt-666`
+✅ URL: https://mission-control-n8garvie-woad.vercel.app
+
+### Prevention Measures
+- Documented in ARCHITECTURE.md under "Common Issues"
+- Always verify Convex deployment URL in Vercel dashboard
+- Use `npx convex run ideas:getStats` to verify correct database before deploying
+- Keep dev and prod Convex deployments clearly labeled
