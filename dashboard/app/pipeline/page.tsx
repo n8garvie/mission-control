@@ -20,7 +20,7 @@ const potentialLabels: Record<string, string> = {
 };
 
 export default function PipelinePage() {
-  const [activeTab, setActiveTab] = useState<"scouted" | "reviewing" | "approved" | "rejected">("scouted");
+  const [activeTab, setActiveTab] = useState<"scouted" | "approved" | "rejected">("scouted");
   const ideas = useQuery(api.ideas.listByPipelineStatus, { status: activeTab });
   const approveIdea = useMutation(api.ideas.approve);
   const rejectIdea = useMutation(api.ideas.reject);
@@ -77,20 +77,20 @@ export default function PipelinePage() {
             </div>
             
             <Link
-              href="/dashboard"
+              href="/"
               className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium text-sm"
             >
               <span>📊</span>
-              <span className="hidden sm:inline">Dashboard</span>
+              <span className="hidden sm:inline">Overview</span>
             </Link>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Tabs */}
+        {/* Tabs - Simplified: Scouted → Approved/Rejected */}
         <div className="flex gap-2 mb-6 overflow-x-auto">
-          {(["scouted", "reviewing", "approved", "rejected"] as const).map((tab) => (
+          {(["scouted", "approved", "rejected"] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -190,13 +190,6 @@ export default function PipelinePage() {
                       >
                         {isLoading === idea._id ? "..." : "✕ Reject"}
                       </button>
-                      <button
-                        onClick={() => handleArchive(idea._id)}
-                        disabled={isLoading === idea._id}
-                        className="px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"
-                      >
-                        {isLoading === idea._id ? "..." : "Archive"}
-                      </button>
                     </div>
                   )}
 
@@ -204,7 +197,7 @@ export default function PipelinePage() {
                     <div className="flex items-center justify-center gap-2 text-sm text-green-600 bg-green-50 py-2 px-4 rounded-lg">
                       <span>✓ Approved</span>
                       <span className="text-gray-400">|</span>
-                      <span>Ready for Dashboard</span>
+                      <span>Ready to Build</span>
                     </div>
                   )}
                 </div>

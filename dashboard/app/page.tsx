@@ -4,15 +4,16 @@ import { useQuery } from "convex/react";
 import { api } from "../convex/_generated/api";
 import Link from "next/link";
 
-const buildStages = [
-  { key: 'not_started', label: 'Not Started', color: 'bg-gray-400', icon: '⚪' },
-  { key: 'agents_spawning', label: 'Spawning', color: 'bg-yellow-500', icon: '🚀' },
-  { key: 'agents_working', label: 'Working', color: 'bg-blue-500', icon: '🔨' },
-  { key: 'building_locally', label: 'Building', color: 'bg-purple-500', icon: '💻' },
-  { key: 'pushing_to_github', label: 'GitHub', color: 'bg-indigo-500', icon: '📦' },
-  { key: 'deploying_to_vercel', label: 'Deploying', color: 'bg-orange-500', icon: '🚢' },
-  { key: 'completed', label: 'Live', color: 'bg-green-500', icon: '🚀' },
-  { key: 'failed', label: 'Failed', color: 'bg-red-500', icon: '❌' },
+// Unified pipeline stages - one continuous flow from idea to deployed product
+const pipelineStages = [
+  { key: 'scouted', label: 'Scouted', color: 'bg-gray-400', icon: '💡', description: 'New ideas awaiting review' },
+  { key: 'approved', label: 'Approved', color: 'bg-blue-400', icon: '✅', description: 'Ready to build' },
+  { key: 'agents_spawning', label: 'Spawning', color: 'bg-yellow-500', icon: '🚀', description: 'Starting agent sessions' },
+  { key: 'agents_working', label: 'Building', color: 'bg-blue-500', icon: '🔨', description: 'Agents coding the product' },
+  { key: 'building_locally', label: 'Testing', color: 'bg-purple-500', icon: '💻', description: 'Local build & verification' },
+  { key: 'pushing_to_github', label: 'Committing', color: 'bg-indigo-500', icon: '📦', description: 'Pushing to GitHub' },
+  { key: 'deploying_to_vercel', label: 'Deploying', color: 'bg-orange-500', icon: '🚢', description: 'Deploying to Vercel' },
+  { key: 'completed', label: 'Live', color: 'bg-green-500', icon: '🚀', description: 'Product is live!' },
 ];
 
 export default function Home() {
@@ -30,9 +31,18 @@ export default function Home() {
     );
   }
 
-  // Get counts for each build stage
-  const stageCounts = buildStages.reduce((acc, stage) => {
-    acc[stage.key] = ideas.filter((idea: any) => idea.buildStage === stage.key).length;
+  // Get counts for each pipeline stage
+  const stageCounts = pipelineStages.reduce((acc, stage) => {
+    if (stage.key === 'scouted') {
+      acc[stage.key] = ideas.filter((idea: any) => idea.pipelineStatus === 'scouted').length;
+    } else if (stage.key === 'approved') {
+      acc[stage.key] = ideas.filter((idea: any) => 
+        idea.pipelineStatus === 'approved' && 
+        (!idea.buildStage || idea.buildStage === 'not_started')
+      ).length;
+    } else {
+      acc[stage.key] = ideas.filter((idea: any) => idea.buildStage === stage.key).length;
+    }
     return acc;
   }, {} as Record<string, number>);
 
@@ -54,18 +64,18 @@ export default function Home() {
             
             <div className="flex items-center gap-2">
               <Link
-                href="/pipeline"
+                href="/ideas"
                 className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
               >
                 <span>💡</span>
-                <span className="hidden sm:inline">Pipeline</span>
+                <span className="hidden sm:inline">Ideas</span>
               </Link>
               <Link
-                href="/dashboard"
+                href="/pipeline"
                 className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium text-sm"
               >
                 <span>📊</span>
-                <span className="hidden sm:inline">Dashboard</span>
+                <span className="hidden sm:inline">Pipeline</span>
               </Link>
             </div>
           </div>
@@ -73,14 +83,14 @@ export default function Home() {
       </header>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* Stats Overview */}
+        {/* Unified Pipeline Overview */}
         <section className="mb-8">
-          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Pipeline Overview</h2>
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Unified Pipeline</h2>
           <div className="grid grid-cols-4 sm:grid-cols-8 gap-3 sm:gap-4">
-            {buildStages.map((stage) => {
+            {pipelineStages.map((stage) => {
               const count = stageCounts[stage.key] || 0;
               return (
-                <div key={stage.key} className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200">
+                <div key={stage.key} className="bg-white rounded-xl p-3 sm:p-4 border border-gray-200 hover:border-blue-300 transition-colors cursor-pointer">
                   <div className="flex flex-col items-center sm:items-start mb-1">
                     <span className="text-xl sm:text-2xl">{stage.icon}</span>
                   </div>
@@ -93,50 +103,28 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Pipeline vs Dashboard Stats */}
-        <section className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Pipeline Stats */}
+        {/* Quick Stats Summary */}
+        <section className="mb-8">
           <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📥 Pipeline</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Scouted</span>
-                <span className="font-semibold">{stats?.pipeline?.scouted || 0}</span>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Pipeline Summary</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-gray-50 rounded-lg">
+                <div className="text-3xl font-bold text-gray-700">{stats?.pipeline?.scouted || 0}</div>
+                <div className="text-sm text-gray-500 mt-1">To Review</div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Reviewing</span>
-                <span className="font-semibold">{stats?.pipeline?.reviewing || 0}</span>
+              <div className="text-center p-4 bg-blue-50 rounded-lg">
+                <div className="text-3xl font-bold text-blue-600">
+                  {(stats?.pipeline?.approved || 0) + (stats?.dashboard?.inProgress || 0)}
+                </div>
+                <div className="text-sm text-gray-500 mt-1">In Progress</div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Approved</span>
-                <span className="font-semibold text-green-600">{stats?.pipeline?.approved || 0}</span>
+              <div className="text-center p-4 bg-purple-50 rounded-lg">
+                <div className="text-3xl font-bold text-purple-600">{stats?.dashboard?.built || 0}</div>
+                <div className="text-sm text-gray-500 mt-1">Built</div>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Rejected</span>
-                <span className="font-semibold text-red-600">{stats?.pipeline?.rejected || 0}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Dashboard Stats */}
-          <div className="bg-white rounded-xl p-6 border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">📊 Dashboard</h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Backlog</span>
-                <span className="font-semibold">{stats?.dashboard?.backlog || 0}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">In Progress</span>
-                <span className="font-semibold text-blue-600">{stats?.dashboard?.inProgress || 0}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Built</span>
-                <span className="font-semibold text-purple-600">{stats?.dashboard?.built || 0}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-gray-600">Deployed</span>
-                <span className="font-semibold text-green-600">{stats?.dashboard?.deployed || 0}</span>
+              <div className="text-center p-4 bg-green-50 rounded-lg">
+                <div className="text-3xl font-bold text-green-600">{stats?.dashboard?.deployed || 0}</div>
+                <div className="text-sm text-gray-500 mt-1">Live</div>
               </div>
             </div>
           </div>
@@ -159,12 +147,19 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <h3 className="font-semibold text-gray-900 truncate">{idea.title}</h3>
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 flex-shrink-0">
-                        {idea.buildStage?.replace(/_/g, ' ') || 'not started'}
-                      </span>
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-600 flex-shrink-0">
-                        {idea.taskStatus}
-                      </span>
+                      {idea.pipelineStatus === 'scouted' ? (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 flex-shrink-0">
+                          💡 Scouted
+                        </span>
+                      ) : idea.buildStage && idea.buildStage !== 'not_started' ? (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">
+                          🔨 {idea.buildStage.replace(/_/g, ' ')}
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 flex-shrink-0">
+                          📋 Approved
+                        </span>
+                      )}
                     </div>
                     <p className="text-sm text-gray-500 truncate">{idea.description}</p>
                   </div>

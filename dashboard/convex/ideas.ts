@@ -4,12 +4,11 @@ import { Id } from "./_generated/dataModel";
 
 // ============== PIPELINE VIEW QUERIES ==============
 
-// List ideas by pipeline status (for Pipeline UI)
+// List ideas by pipeline status (for Pipeline UI) - Simplified flow
 export const listByPipelineStatus = query({
   args: {
     status: v.union(
       v.literal("scouted"),
-      v.literal("reviewing"),
       v.literal("approved"),
       v.literal("rejected"),
       v.literal("archived")
@@ -146,8 +145,8 @@ export const approve = mutation({
   handler: async (ctx, args) => {
     const idea = await ctx.db.get(args.ideaId);
     if (!idea) throw new Error("Idea not found");
-    if (idea.pipelineStatus !== "scouted" && idea.pipelineStatus !== "reviewing") {
-      throw new Error("Idea must be scouted or reviewing to approve");
+    if (idea.pipelineStatus !== "scouted") {
+      throw new Error("Idea must be scouted to approve");
     }
 
     const now = Date.now();
@@ -584,7 +583,6 @@ export const getStats = query({
       total: allIdeas.length,
       pipeline: {
         scouted: allIdeas.filter(i => i.pipelineStatus === "scouted").length,
-        reviewing: allIdeas.filter(i => i.pipelineStatus === "reviewing").length,
         approved: allIdeas.filter(i => i.pipelineStatus === "approved").length,
         rejected: allIdeas.filter(i => i.pipelineStatus === "rejected").length,
         archived: allIdeas.filter(i => i.pipelineStatus === "archived").length,

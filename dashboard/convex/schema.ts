@@ -189,10 +189,9 @@ export default defineSchema({
     discoveryUrl: v.optional(v.string()),
     discoveryContext: v.optional(v.string()),
     
-    // Pipeline workflow (for Pipeline UI)
+    // Pipeline workflow (for Pipeline UI) - Simplified: Scouted → Approved/Rejected
     pipelineStatus: v.union(
       v.literal("scouted"),
-      v.literal("reviewing"),
       v.literal("approved"),
       v.literal("rejected"),
       v.literal("archived")
