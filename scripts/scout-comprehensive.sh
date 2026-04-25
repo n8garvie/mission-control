@@ -84,6 +84,43 @@ save_idea() {
     fi
 }
 
+# Check if idea already exists (any status)
+check_duplicate() {
+    local title="$1"
+    
+    if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+        return 1  # Can't check, assume not duplicate
+    fi
+    
+    cd "/home/n8garvie/.openclaw/workspace/mission-control/dashboard"
+    
+    # Get all ideas and check for similar titles
+    local all_ideas=$(npx convex run ideas:list 2>/dev/null | jq -r '.[].title' 2>/dev/null)
+    
+    # Check for exact match or very similar titles
+    local normalized_title=$(echo "$title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g')
+    
+    while IFS= read -r existing_title; do
+        if [ -n "$existing_title" ]; then
+            local normalized_existing=$(echo "$existing_title" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]//g')
+            
+            # Check for exact match or if one contains the other
+            if [ "$normalized_title" == "$normalized_existing" ]; then
+                log "${YELLOW}⚠ Duplicate found (exact match): '$existing_title'${NC}"
+                return 0  # Duplicate found
+            fi
+            
+            # Check if titles are very similar (80% match)
+            if [[ "$normalized_title" == *"$normalized_existing"* ]] || [[ "$normalized_existing" == *"$normalized_title"* ]]; then
+                log "${YELLOW}⚠ Duplicate found (similar): '$existing_title'${NC}"
+                return 0  # Similar duplicate found
+            fi
+        fi
+    done <<< "$all_ideas"
+    
+    return 1  # No duplicate found
+}
+
 # ==================== RESEARCH PHASE ====================
 
 echo -e "${BLUE}📊 PHASE 1: Market Intelligence Gathering${NC}"
@@ -172,9 +209,6 @@ echo "----------------------------------------"
 
 # Ideas are synthesized by blending multiple sources
 declare -a BLENDED_IDEAS=(
-    # Blend: GitHub Stars (memos) + AI Trend (local LLM) + SaaS (self-hosted)
-    "Local-First Knowledge Base with AI|Personal wiki that runs entirely local with AI-powered connections and search. Inspired by your starred memos repo + local LLM trend. No cloud required, complete privacy.|Privacy-conscious professionals, researchers|Desktop app + local vector DB + Ollama integration + markdown editor|high|agent|[\"ai\",\"knowledge\",\"privacy\",\"local\"]|productivity|usememos/memos + Ollama trend"
-    
     # Blend: GitHub Stars (claude-agents) + AI Trend (agents) + PH (dev tools)
     "AI Agent IDE Plugin|VS Code extension that lets you spawn specialized AI agents for different tasks (testing, docs, refactoring). Like your starred claude-agents but integrated into IDE.|Software developers, engineering teams|VS Code extension + agent marketplace + task queue|moonshot|agent|[\"ai\",\"devtools\",\"agents\",\"ide\"]|developer-tools|claude-agents + Cursor IDE trend"
     
@@ -231,6 +265,12 @@ for idea in "${BLENDED_IDEAS[@]}"; do
     echo "  Category: $category"
     echo "  Potential: $potential"
     [ -n "$inspiration" ] && echo "  💡 Inspired by: $inspiration"
+    
+    # Check for duplicates before saving
+    if check_duplicate "$title"; then
+        echo "  ${YELLOW}⚠ Skipping duplicate idea${NC}"
+        continue
+    fi
     
     if save_idea "$title" "$description" "$target" "$mvp" "$potential" "$source" "$tags" "$category" "$inspiration"; then
         ((success_count++))
