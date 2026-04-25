@@ -29,9 +29,24 @@ export default function DashboardPage() {
   const [selectedIdea, setSelectedIdea] = useState<any>(null);
   const ideas = useQuery(api.ideas.list);
   
-  // Group ideas by task status
+  // Group ideas by status (using 'status' field from Convex, not 'taskStatus')
   const ideasByStatus = columns.reduce((acc, col) => {
-    acc[col.key] = ideas?.filter((idea: any) => idea.taskStatus === col.key) || [];
+    acc[col.key] = ideas?.filter((idea: any) => {
+      // Map Convex status to column keys
+      const statusMap: Record<string, string> = {
+        'backlog': 'backlog',
+        'scouted': 'backlog',
+        'approved': 'assigned',
+        'building': 'in_progress',
+        'built': 'built',
+        'deployed': 'deployed',
+        'done': 'deployed',
+        'failed': 'blocked',
+        'rejected': 'blocked'
+      };
+      const mappedStatus = statusMap[idea.status] || 'backlog';
+      return mappedStatus === col.key;
+    }) || [];
     return acc;
   }, {} as Record<string, any[]>);
 
@@ -89,11 +104,11 @@ export default function DashboardPage() {
                       {/* Title */}
                       <h4 className="font-medium text-gray-900 mb-2 line-clamp-2">{idea.title}</h4>
                       
-                      {/* Build Stage */}
+                      {/* Build Stage - use status if buildStage not present */}
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg">{buildStageIcons[idea.buildStage] || "⚪"}</span>
+                        <span className="text-lg">{buildStageIcons[idea.buildStage || idea.status] || "⚪"}</span>
                         <span className="text-xs text-gray-500 capitalize">
-                          {idea.buildStage?.replace(/_/g, " ") || "not started"}
+                          {(idea.buildStage || idea.status)?.replace(/_/g, " ") || "not started"}
                         </span>
                       </div>
 

@@ -7,7 +7,7 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   const convex = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_CONVEX_URL;
     if (!url) {
-      console.warn("NEXT_PUBLIC_CONVEX_URL not set");
+      console.error("NEXT_PUBLIC_CONVEX_URL not set");
       return null;
     }
     try {
@@ -19,7 +19,14 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   }, []);
 
   if (!convex) {
-    return <>{children}</>;
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Configuration Error</h2>
+          <p className="text-gray-600">Convex URL not configured. Please check your environment variables.</p>
+        </div>
+      </div>
+    );
   }
 
   return <ConvexProvider client={convex}>{children}</ConvexProvider>;

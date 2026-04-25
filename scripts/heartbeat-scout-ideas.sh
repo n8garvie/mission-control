@@ -71,7 +71,7 @@ save_idea_to_convex() {
     
     # Use Convex CLI to save idea
     cd "/home/n8garvie/.openclaw/workspace/mission-control/dashboard"
-    json_args="{\"title\":\"$title\",\"description\":\"$description\",\"targetAudience\":\"$target\",\"mvpScope\":\"$mvp\",\"potential\":\"$potential\",\"source\":\"$source\",\"tags\":$tags}"
+    json_args="{\"title\":\"$title\",\"description\":\"$description\",\"targetAudience\":\"$target\",\"mvpScope\":\"$mvp\",\"potential\":\"$potential\",\"discoverySource\":\"$source\",\"tags\":$tags}"
     response=$(npx convex run ideas:create "$json_args" 2>&1)
     
     if [ $? -eq 0 ]; then

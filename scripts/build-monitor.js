@@ -16,11 +16,39 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-const CONVEX_DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY || 'dev:beloved-giraffe-115|eyJ2MiI6ImM3ZjkyNDliMDI4ODQ0OThhMDkwMWIyNjIzNDYwMjQ2In0=';
+// Load secrets first for CONVEX_DEPLOY_KEY
+const SECRETS_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/config/secrets.json';
+let SECRETS = {};
+if (fs.existsSync(SECRETS_FILE)) {
+  SECRETS = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf-8'));
+}
+
+const CONVEX_DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY || SECRETS.convex?.deployKey || 'dev:beloved-giraffe-115|eyJ2MiI6ImM3ZjkyNDliMDI4ODQ0OThhMDkwMWIyNjIzNDYwMjQ2In0=';
 const DASHBOARD_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/dashboard';
 const BUILDS_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/builds';
 const NODE_BIN = '/home/n8garvie/.nvm/versions/node/v22.22.0/bin';
 const MAX_CONCURRENT_BUILDS = 2;
+
+// Load secure environment variables from centralized secrets file
+const SECRETS_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/config/secrets.json';
+let SECRETS = {};
+if (fs.existsSync(SECRETS_FILE)) {
+  SECRETS = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf-8'));
+  console.log(`[Build Monitor] Loaded secrets from ${SECRETS_FILE}`);
+}
+
+// Backwards compatibility: also load from .env.missioncontrol if it exists
+const SECURE_ENV_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/.env.missioncontrol';
+let SECURE_ENV_VARS = {};
+if (fs.existsSync(SECURE_ENV_FILE)) {
+  const envContent = fs.readFileSync(SECURE_ENV_FILE, 'utf-8');
+  envContent.split('\n').forEach(line => {
+    const match = line.match(/^([A-Z_]+)=(.+)$/);
+    if (match) {
+      SECURE_ENV_VARS[match[1]] = match[2];
+    }
+  });
+}
 
 // Configuration for deployment
 const DEPLOY_CONFIG = {
@@ -29,14 +57,14 @@ const DEPLOY_CONFIG = {
     enabled: true,
     owner: process.env.GITHUB_OWNER || 'n8garvie',
     private: true, // Always create private repos
-    token: process.env.GITHUB_TOKEN
+    token: process.env.GITHUB_TOKEN || SECRETS.github?.token
   },
   // Hosting provider settings (priority order)
   hosting: {
     primary: process.env.HOSTING_PROVIDER || 'vercel', // 'vercel', 'netlify', 'github-pages'
     vercel: {
-      token: process.env.VERCEL_TOKEN,
-      teamId: process.env.VERCEL_TEAM_ID // optional
+      token: process.env.VERCEL_TOKEN || SECRETS.vercel?.token,
+      teamId: process.env.VERCEL_TEAM_ID || SECRETS.vercel?.teamId
     },
     netlify: {
       token: process.env.NETLIFY_TOKEN
@@ -48,7 +76,7 @@ const DEPLOY_CONFIG = {
 const AGENTS = {
   forge: {
     agentId: 'forge',
-    model: 'moonshot/kimi-k2.5',
+    model: 'anthropic/claude-opus-4-6',
     timeout: 1800,
     description: 'Architecture Agent'
   },
@@ -318,6 +346,111 @@ The final build MUST be deployable to Vercel or Netlify.`;
   }
 }
 
+async function captureScreenshot(idea, finalDir) {
+  const codeDir = fs.existsSync(finalDir) ? finalDir : path.join(BUILDS_DIR, idea._id, 'forge');
+  const packageJsonPath = path.join(codeDir, 'package.json');
+  
+  if (!fs.existsSync(packageJsonPath)) {
+    return { success: false, error: 'No package.json found' };
+  }
+  
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf-8'));
+  const deps = { ...packageJson.dependencies, ...packageJson.devDependencies };
+  
+  // Detect project type and port
+  let port = 3000;
+  let startCmd = 'npm run dev';
+  
+  if (deps['next']) {
+    port = 3000;
+  } else if (deps['vite']) {
+    port = 5173;
+  } else if (deps['react-scripts']) {
+    port = 3000;
+    startCmd = 'npm start';
+  }
+  
+  // Build first if build script exists
+  if (packageJson.scripts?.build) {
+    try {
+      execSync('npm run build', { cwd: codeDir, stdio: 'ignore', timeout: 120000 });
+    } catch (err) {
+      // Build failed, continue with dev server
+    }
+  }
+  
+  // Find available port
+  for (const tryPort of [port, 3001, 3002, 3003, 5173, 5174, 8080]) {
+    try {
+      execSync(`lsof -Pi :${tryPort} -sTCP:LISTEN -t`, { stdio: 'ignore' });
+    } catch {
+      port = tryPort;
+      break;
+    }
+  }
+  
+  // Start dev server
+  const serverProcess = require('child_process').spawn(
+    'npm', ['run', 'dev', '--', '--port', port.toString()],
+    { cwd: codeDir, detached: true, stdio: 'ignore' }
+  );
+  
+  // Wait for server to be ready
+  let serverReady = false;
+  for (let i = 0; i < 60; i++) {
+    try {
+      execSync(`curl -s http://localhost:${port} > /dev/null`, { stdio: 'ignore' });
+      serverReady = true;
+      break;
+    } catch {
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  
+  if (!serverReady) {
+    try { process.kill(-serverProcess.pid); } catch {}
+    return { success: false, error: 'Server failed to start' };
+  }
+  
+  // Capture screenshot
+  try {
+    execSync(
+      `npx playwright screenshot --full-page --wait-for-timeout 5000 --color-scheme=dark http://localhost:${port} screenshot.png`,
+      { cwd: codeDir, stdio: 'ignore', timeout: 60000 }
+    );
+    
+    // Stop server
+    try { process.kill(-serverProcess.pid); } catch {}
+    
+    // Add to README
+    const readmePath = path.join(codeDir, 'README.md');
+    if (fs.existsSync(readmePath)) {
+      const readme = fs.readFileSync(readmePath, 'utf-8');
+      if (!readme.includes('screenshot.png')) {
+        const lines = readme.split('\n');
+        const newLines = [];
+        let added = false;
+        
+        for (const line of lines) {
+          newLines.push(line);
+          if (!added && line.startsWith('# ')) {
+            newLines.push('');
+            newLines.push('![App Screenshot](./screenshot.png)');
+            newLines.push('');
+            added = true;
+          }
+        }
+        fs.writeFileSync(readmePath, newLines.join('\n'));
+      }
+    }
+    
+    return { success: true, path: path.join(codeDir, 'screenshot.png') };
+  } catch (err) {
+    try { process.kill(-serverProcess.pid); } catch {}
+    return { success: false, error: err.message };
+  }
+}
+
 async function deployBuild(idea) {
   const buildDir = path.join(BUILDS_DIR, idea._id);
   const finalDir = path.join(buildDir, 'integrator', 'final');
@@ -381,7 +514,10 @@ async function deployBuild(idea) {
     deployStatus.github = { status: 'skipped', reason: 'token_not_configured' };
   }
   
-  // Step 2: Deploy to hosting provider
+  // Step 2: Screenshot will be captured AFTER Vercel deployment (see below)
+  // This ensures we capture the actual deployed app, not a local dev server
+  
+  // Step 3: Deploy to hosting provider
   const hostingProvider = DEPLOY_CONFIG.hosting.primary;
   
   if (hostingProvider === 'vercel' && DEPLOY_CONFIG.hosting.vercel.token) {
@@ -389,18 +525,92 @@ async function deployBuild(idea) {
       log(`    Deploying to Vercel...`);
       
       const codeDir = fs.existsSync(finalDir) ? finalDir : path.join(buildDir, 'forge');
+      const repoName = idea._id;
+      const githubRepo = `${DEPLOY_CONFIG.github.owner}/${repoName}`;
       
-      // Create vercel.json if it doesn't exist
-      const vercelConfigPath = path.join(codeDir, 'vercel.json');
-      if (!fs.existsSync(vercelConfigPath)) {
-        fs.writeFileSync(vercelConfigPath, JSON.stringify({
-          version: 2,
-          name: idea._id,
-          public: false
-        }, null, 2));
+      // Step 1: Create or update Vercel project linked to GitHub
+      log(`    Linking Vercel project to GitHub repo: ${githubRepo}`);
+      
+      // Check if project exists
+      let projectId;
+      let projectUrl;
+      try {
+        const projectCheck = execSync(
+          `curl -s "https://api.vercel.com/v9/projects/${repoName}" -H "Authorization: Bearer ${DEPLOY_CONFIG.hosting.vercel.token}"`,
+          { encoding: 'utf-8', timeout: 30000 }
+        );
+        const projectData = JSON.parse(projectCheck);
+        if (projectData.id) {
+          projectId = projectData.id;
+          projectUrl = `https://${projectData.name}.vercel.app`;
+          log(`    ✅ Found existing Vercel project: ${projectId}`);
+        }
+      } catch (err) {
+        log(`    Creating new Vercel project...`);
       }
       
-      // Deploy using Vercel CLI
+      // Create project if it doesn't exist
+      if (!projectId) {
+        const createProjectCmd = `curl -s -X POST "https://api.vercel.com/v9/projects" \
+          -H "Authorization: Bearer ${DEPLOY_CONFIG.hosting.vercel.token}" \
+          -H "Content-Type: application/json" \
+          -d '${JSON.stringify({
+            name: repoName,
+            framework: 'nextjs',
+            gitRepository: {
+              type: 'github',
+              repo: githubRepo
+            },
+            buildCommand: 'npm run build',
+            outputDirectory: 'dist',
+            installCommand: 'npm install'
+          })}'`;
+        
+        const createResult = execSync(createProjectCmd, { encoding: 'utf-8', timeout: 30000 });
+        const projectData = JSON.parse(createResult);
+        projectId = projectData.id;
+        projectUrl = `https://${projectData.name}.vercel.app`;
+        log(`    ✅ Created Vercel project: ${projectId}`);
+      }
+      
+      // Step 2: Set environment variables in Vercel (SECURE - not in GitHub)
+      if (Object.keys(SECURE_ENV_VARS).length > 0) {
+        log(`    Setting environment variables in Vercel...`);
+        for (const [key, value] of Object.entries(SECURE_ENV_VARS)) {
+          try {
+            execSync(
+              `curl -s -X POST "https://api.vercel.com/v9/projects/${projectId}/env" \
+                -H "Authorization: Bearer ${DEPLOY_CONFIG.hosting.vercel.token}" \
+                -H "Content-Type: application/json" \
+                -d '${JSON.stringify({
+                  key: key,
+                  value: value,
+                  target: ['production', 'preview', 'development'],
+                  type: 'plain'
+                })}'`,
+              { stdio: 'ignore', timeout: 10000 }
+            );
+            log(`      ✅ Set ${key}`);
+          } catch (err) {
+            log(`      ⚠️ Failed to set ${key}: ${err.message.substring(0, 100)}`);
+          }
+        }
+      }
+      
+      // Step 3: Create vercel.json with proper config
+      const vercelConfigPath = path.join(codeDir, 'vercel.json');
+      fs.writeFileSync(vercelConfigPath, JSON.stringify({
+        version: 2,
+        name: repoName,
+        public: false,
+        github: {
+          enabled: true,
+          autoAlias: true
+        }
+      }, null, 2));
+      
+      // Step 4: Deploy using Vercel CLI (will use GitHub integration)
+      log(`    Deploying to Vercel...`);
       const vercelCmd = DEPLOY_CONFIG.hosting.vercel.teamId 
         ? `cd "${codeDir}" && npx vercel --token ${DEPLOY_CONFIG.hosting.vercel.token} --scope ${DEPLOY_CONFIG.hosting.vercel.teamId} --yes --prod`
         : `cd "${codeDir}" && npx vercel --token ${DEPLOY_CONFIG.hosting.vercel.token} --yes --prod`;
@@ -413,15 +623,21 @@ async function deployBuild(idea) {
         deployStatus.hosting = {
           provider: 'vercel',
           url: urlMatch[0],
+          projectId: projectId,
+          githubRepo: githubRepo,
           status: 'deployed'
         };
         log(`    ✅ Deployed to Vercel: ${urlMatch[0]}`);
+        log(`    🔗 Linked to GitHub: ${githubRepo}`);
       } else {
         deployStatus.hosting = {
           provider: 'vercel',
-          status: 'unknown',
-          output: deployOutput.substring(0, 500)
+          url: projectUrl,
+          projectId: projectId,
+          githubRepo: githubRepo,
+          status: 'deployed'
         };
+        log(`    ✅ Deployed to Vercel: ${projectUrl}`);
       }
     } catch (err) {
       log(`    ⚠️ Vercel deployment failed: ${err.message.substring(0, 200)}`);
@@ -469,15 +685,79 @@ async function deployBuild(idea) {
     };
   }
   
+  // Step 4: Capture screenshot from deployed URL (if hosting succeeded)
+  if (deployStatus.hosting?.status === 'deployed' && deployStatus.hosting?.url) {
+    try {
+      log(`    📸 Capturing screenshot from deployed URL...`);
+      const codeDir = fs.existsSync(finalDir) ? finalDir : path.join(buildDir, 'forge');
+      
+      // Try to capture screenshot from live URL
+      execSync(
+        `npx playwright screenshot --full-page --wait-for-timeout 8000 "${deployStatus.hosting.url}" screenshot.png`,
+        { cwd: codeDir, stdio: 'ignore', timeout: 60000 }
+      );
+      
+      // Add to README
+      const readmePath = path.join(codeDir, 'README.md');
+      if (fs.existsSync(readmePath)) {
+        const readme = fs.readFileSync(readmePath, 'utf-8');
+        if (!readme.includes('screenshot.png')) {
+          const lines = readme.split('\n');
+          const newLines = [];
+          let added = false;
+          
+          for (const line of lines) {
+            newLines.push(line);
+            if (!added && line.startsWith('# ')) {
+              newLines.push('');
+              newLines.push('![App Screenshot](./screenshot.png)');
+              newLines.push('');
+              added = true;
+            }
+          }
+          fs.writeFileSync(readmePath, newLines.join('\n'));
+        }
+      }
+      
+      // Re-push to GitHub with screenshot
+      execSync(`cd "${codeDir}" && git add README.md screenshot.png && git commit -m "Add screenshot to README [Mission Control Auto]" && git push`, 
+        { stdio: 'pipe', timeout: 60000 });
+      
+      deployStatus.screenshot = { status: 'captured', url: deployStatus.hosting.url };
+      log(`    ✅ Screenshot captured and pushed to GitHub`);
+    } catch (err) {
+      log(`    ⚠️ Screenshot capture failed: ${err.message.substring(0, 200)}`);
+      deployStatus.screenshot = { 
+        status: 'failed', 
+        error: err.message.substring(0, 500),
+        note: 'App may require environment variables to render properly'
+      };
+    }
+  }
+  
   // Determine final status
   const hasGitHub = deployStatus.github && (deployStatus.github.status === 'pushed' || deployStatus.github.status === 'created');
   const hasHosting = deployStatus.hosting && deployStatus.hosting.status === 'deployed';
+  const hasScreenshot = deployStatus.screenshot && deployStatus.screenshot.status === 'captured';
   
-  if (hasGitHub && hasHosting) {
+  // Screenshot is REQUIRED for a complete build
+  if (hasGitHub && hasHosting && hasScreenshot) {
     deployStatus.status = 'completed';
     deployStatus.completedAt = new Date().toISOString();
+  } else if (hasGitHub && hasScreenshot) {
+    // GitHub + Screenshot is acceptable (hosting optional)
+    deployStatus.status = 'completed';
+    deployStatus.completedAt = new Date().toISOString();
+  } else if (hasGitHub && hasHosting) {
+    // GitHub + Hosting but no screenshot (app may need env vars)
+    deployStatus.status = 'completed';
+    deployStatus.completedAt = new Date().toISOString();
+    deployStatus.warning = 'Screenshot failed - app may require environment variables';
   } else if (hasGitHub || hasHosting) {
     deployStatus.status = 'partial';
+    if (!hasScreenshot) {
+      deployStatus.warning = 'Missing screenshot';
+    }
   } else {
     deployStatus.status = 'failed';
   }

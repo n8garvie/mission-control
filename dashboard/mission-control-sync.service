@@ -1,0 +1,14 @@
+[Unit]
+Description=Mission Control Dashboard Real-Time Sync
+After=network.target
+
+[Service]
+Type=simple
+User=n8garvie
+WorkingDirectory=/home/n8garvie/.openclaw/workspace/mission-control/dashboard
+ExecStart=/bin/bash /home/n8garvie/.openclaw/workspace/mission-control/dashboard/scripts/sync-realtime.sh
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

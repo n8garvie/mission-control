@@ -1,0 +1,452 @@
+{
+  "updated": "2026-04-25",
+  "components": {
+    "buttons": {
+      "principles": [
+        "Clear hierarchy: primary, secondary, ghost",
+        "Consistent padding: 8-12px vertical, 12-24px horizontal",
+        "Visible focus states with ring",
+        "Subtle hover transitions (150ms)",
+        "No drastic color changes on hover"
+      ],
+      "examples": {
+        "Linear": {
+          "primary": "bg-[#5E6AD2] text-white px-3 py-2 rounded-md",
+          "secondary": "bg-transparent border border-[#2A2E37] text-[#E2E4E9]",
+          "ghost": "bg-transparent text-[#E2E4E9] hover:bg-[#1A1D23]"
+        },
+        "Stripe": {
+          "primary": "bg-[#635BFF] text-white px-6 py-3 rounded-lg font-semibold",
+          "secondary": "border border-[#2A2A2A] text-white hover:border-[#635BFF]",
+          "ghost": "text-[#A1A1AA] hover:text-white"
+        }
+      }
+    },
+    "inputs": {
+      "principles": [
+        "Subtle borders, visible on focus",
+        "Placeholder text secondary color",
+        "Consistent padding with buttons",
+        "Error states with red border + message"
+      ],
+      "examples": {
+        "Linear": {
+          "base": "bg-[#15171C] border border-[#2A2E37] rounded-md px-3 py-2 text-[#E2E4E9]",
+          "focus": "border-[#5E6AD2] ring-2 ring-[#5E6AD2]/20",
+          "error": "border-red-500"
+        }
+      }
+    },
+    "cards": {
+      "principles": [
+        "Flat design preferred over shadows",
+        "Subtle borders for definition",
+        "Generous internal padding (16-24px)",
+        "Clear visual hierarchy within card"
+      ],
+      "examples": {
+        "Linear": {
+          "base": "bg-[#15171C] border border-[#2A2E37] rounded-lg p-4",
+          "hover": "border-[#3E4450]"
+        },
+        "Stripe": {
+          "base": "bg-[#141414] border border-[#2A2A2A] rounded-xl p-6",
+          "hover": "border-[#404040]"
+        }
+      }
+    },
+    "navigation": {
+      "principles": [
+        "Minimal items (max 5-7)",
+        "Clear active state",
+        "Consistent spacing between items",
+        "Collapsible on mobile"
+      ],
+      "examples": {
+        "Linear": {
+          "style": "Horizontal top nav, glassmorphic on scroll",
+          "active": "text-white font-medium",
+          "inactive": "text-[#8A8F98] hover:text-[#E2E4E9]"
+        },
+        "Notion": {
+          "style": "Sidebar with collapsible sections",
+          "active": "bg-[#E3E3E3] text-black",
+          "hover": "bg-[#EFEFEF]"
+        }
+      }
+    },
+    "typography": {
+      "principles": [
+        "Font: Inter (system fallback)",
+        "Headings: 600-800 weight, tight leading",
+        "Body: 400 weight, comfortable leading (1.5-1.6)",
+        "Labels: Uppercase, 11-12px, 0.05em tracking",
+        "Numbers: Monospace for alignment"
+      ],
+      "scale": {
+        "hero": {
+          "size": "72px",
+          "weight": 800,
+          "lineHeight": 1
+        },
+        "h1": {
+          "size": "48px",
+          "weight": 700,
+          "lineHeight": 1.1
+        },
+        "h2": {
+          "size": "32px",
+          "weight": 600,
+          "lineHeight": 1.2
+        },
+        "h3": {
+          "size": "24px",
+          "weight": 600,
+          "lineHeight": 1.3
+        },
+        "body": {
+          "size": "16px",
+          "weight": 400,
+          "lineHeight": 1.5
+        },
+        "caption": {
+          "size": "14px",
+          "weight": 500,
+          "lineHeight": 1.4
+        },
+        "label": {
+          "size": "12px",
+          "weight": 500,
+          "lineHeight": 1.4,
+          "uppercase": true,
+          "tracking": "0.05em"
+        }
+      }
+    },
+    "colors": {
+      "darkMode": {
+        "background": {
+          "primary": "#0A0A0A",
+          "secondary": "#111111",
+          "tertiary": "#1A1A1A"
+        },
+        "text": {
+          "primary": "#FFFFFF",
+          "secondary": "#A1A1AA",
+          "tertiary": "#71717A"
+        },
+        "border": {
+          "default": "#2A2A2A",
+          "hover": "#404040",
+          "strong": "#666666"
+        }
+      },
+      "accents": {
+        "purple": {
+          "primary": "#635BFF",
+          "hover": "#7B74FF"
+        },
+        "blue": {
+          "primary": "#0070F3",
+          "hover": "#0060D6"
+        },
+        "periwinkle": {
+          "primary": "#5E6AD2",
+          "hover": "#6872E3"
+        },
+        "emerald": {
+          "primary": "#4CD964",
+          "hover": "#5EE974"
+        },
+        "cyan": {
+          "primary": "#00D4FF",
+          "hover": "#33DDFF"
+        }
+      }
+    },
+    "spacing": {
+      "base": "4px",
+      "scale": [
+        4,
+        8,
+        12,
+        16,
+        20,
+        24,
+        32,
+        40,
+        48,
+        64,
+        96
+      ],
+      "patterns": {
+        "cardPadding": "24px",
+        "sectionGap": "32-48px",
+        "componentGap": "16-24px",
+        "tightUI": "8-12px"
+      }
+    },
+    "effects": {
+      "glassmorphism": {
+        "background": "rgba(17, 17, 24, 0.7)",
+        "blur": "blur(20px)",
+        "border": "1px solid rgba(255, 255, 255, 0.08)"
+      },
+      "gradients": {
+        "text": "linear-gradient(135deg, #4CD964, #00D4FF)",
+        "border": "linear-gradient(135deg, #4CD964, #00D4FF)",
+        "glow": "0 0 40px rgba(76, 217, 100, 0.15)"
+      },
+      "shadows": {
+        "subtle": "0 1px 2px rgba(0, 0, 0, 0.3)",
+        "card": "0 4px 12px rgba(0, 0, 0, 0.4)",
+        "elevated": "0 20px 40px rgba(0, 0, 0, 0.4)"
+      }
+    }
+  },
+  "tastePrinciples": [
+    "Every element must earn its place — if in doubt, remove it",
+    "Color used sparingly creates impact — grayscale with one accent",
+    "Typography does the heavy lifting — size and weight create hierarchy",
+    "Generous whitespace signals premium quality",
+    "Subtle interactions delight without distraction",
+    "Flat design with strategic depth (glass, gradients)",
+    "Consistency within the system, boldness in the concept"
+  ],
+  "aestheticMatching": {
+    "description": "Match design aesthetic to product type and target audience",
+    "recommendations": {
+      "productivity-tools": [
+        "minimal-clean",
+        "dark-cyber"
+      ],
+      "developer-tools": [
+        "bold-developer",
+        "dark-cyber",
+        "modern-gradient"
+      ],
+      "fintech": [
+        "bold-developer",
+        "luxury-premium",
+        "data-dense"
+      ],
+      "ecommerce": [
+        "luxury-premium",
+        "ecommerce-conversion",
+        "playful-friendly"
+      ],
+      "creative-tools": [
+        "modern-gradient",
+        "brutalist-experimental",
+        "playful-friendly"
+      ],
+      "content-platforms": [
+        "editorial-typography",
+        "swiss-grid",
+        "minimal-clean"
+      ],
+      "consumer-apps": [
+        "playful-friendly",
+        "modern-gradient",
+        "luxury-premium"
+      ],
+      "enterprise-saas": [
+        "minimal-clean",
+        "data-dense",
+        "bold-developer"
+      ],
+      "collectibles-luxury": [
+        "luxury-premium",
+        "editorial-typography",
+        "swiss-grid"
+      ],
+      "education": [
+        "playful-friendly",
+        "minimal-clean",
+        "modern-gradient"
+      ]
+    },
+    "byAesthetic": {
+      "minimal-clean": {
+        "description": "Clean, sophisticated, focused on content",
+        "colors": {
+          "bg": "#0F1115",
+          "accent": "#5E6AD2",
+          "text": "#E2E4E9"
+        },
+        "examples": [
+          "Linear",
+          "Notion",
+          "Cron"
+        ],
+        "bestFor": [
+          "productivity",
+          "professional-tools",
+          "focus-intensive-apps"
+        ]
+      },
+      "bold-developer": {
+        "description": "Confident, vibrant, developer-focused",
+        "colors": {
+          "bg": "#0A0A0A",
+          "accent": "#635BFF",
+          "text": "#FFFFFF"
+        },
+        "examples": [
+          "Stripe",
+          "Vercel",
+          "PlanetScale"
+        ],
+        "bestFor": [
+          "dev-tools",
+          "API-products",
+          "technical-platforms"
+        ]
+      },
+      "modern-gradient": {
+        "description": "Vibrant gradients, dynamic, forward-thinking",
+        "colors": {
+          "bg": "#000000",
+          "accent": "linear-gradient(135deg, #0070F3, #00E5FF)",
+          "text": "#FFFFFF"
+        },
+        "examples": [
+          "Framer",
+          "Pitch",
+          "Loom"
+        ],
+        "bestFor": [
+          "creative-tools",
+          "presentations",
+          "modern-startups"
+        ]
+      },
+      "luxury-premium": {
+        "description": "Elegant, generous spacing, product-focused",
+        "colors": {
+          "bg": "#FFFFFF",
+          "accent": "#000000",
+          "text": "#1A1A1A"
+        },
+        "examples": [
+          "Apple",
+          "Aesop",
+          "Tiffany"
+        ],
+        "bestFor": [
+          "high-end-products",
+          "fashion",
+          "collectibles",
+          "jewelry"
+        ]
+      },
+      "editorial-typography": {
+        "description": "Content-first, beautiful reading experience",
+        "colors": {
+          "bg": "#FAFAFA",
+          "accent": "#FF6B6B",
+          "text": "#2D2D2D"
+        },
+        "examples": [
+          "Substack",
+          "Medium",
+          "Read.cv"
+        ],
+        "bestFor": [
+          "publishing",
+          "blogs",
+          "long-form-content"
+        ]
+      },
+      "brutalist-experimental": {
+        "description": "Raw, unexpected, memorable",
+        "colors": {
+          "bg": "#FFFFFF",
+          "accent": "#FF0000",
+          "text": "#000000"
+        },
+        "examples": [
+          "Gumroad",
+          "Are.na",
+          "Teenage Engineering"
+        ],
+        "bestFor": [
+          "creative-portfolios",
+          "art-projects",
+          "standout-brands"
+        ]
+      },
+      "playful-friendly": {
+        "description": "Approachable, gamified, delightful",
+        "colors": {
+          "bg": "#58CC02",
+          "accent": "#FFD700",
+          "text": "#3C3C3C"
+        },
+        "examples": [
+          "Duolingo",
+          "Discord",
+          "Zapier"
+        ],
+        "bestFor": [
+          "consumer-apps",
+          "education",
+          "social-platforms"
+        ]
+      },
+      "dark-cyber": {
+        "description": "Matrix-like, terminal-inspired, dev-culture",
+        "colors": {
+          "bg": "#000000",
+          "accent": "#00FF41",
+          "text": "#00FF41"
+        },
+        "examples": [
+          "Warp",
+          "CodeSandbox",
+          "Arc Browser"
+        ],
+        "bestFor": [
+          "developer-tools",
+          "hacker-culture",
+          "terminal-apps"
+        ]
+      },
+      "swiss-grid": {
+        "description": "Strict grid, asymmetric, typographic",
+        "colors": {
+          "bg": "#FFFFFF",
+          "accent": "#FF0000",
+          "text": "#000000"
+        },
+        "examples": [
+          "Swiss Design",
+          "Readwise"
+        ],
+        "bestFor": [
+          "portfolios",
+          "galleries",
+          "editorial-design"
+        ]
+      },
+      "data-dense": {
+        "description": "Information-rich, compact, analytical",
+        "colors": {
+          "bg": "#111111",
+          "accent": "#4CD964",
+          "text": "#E2E4E9"
+        },
+        "examples": [
+          "Amplitude",
+          "Mixpanel",
+          "Railway"
+        ],
+        "bestFor": [
+          "analytics",
+          "dashboards",
+          "b2b-saas"
+        ]
+      }
+    }
+  }
+}

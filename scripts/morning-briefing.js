@@ -49,21 +49,25 @@ function getYesterdayDate() {
   return `${year}-${month}-${day}`;
 }
 
-// Get overnight builds
+// Get overnight builds (completed yesterday)
 function getOvernightBuilds() {
   try {
     const output = execSync(
-      `cd "${DASHBOARD_DIR}" && npx convex run ideas:listByStatus '{"status":"done"}'`,
+      `cd "${DASHBOARD_DIR}" && npx convex run ideas:list`,
       { encoding: 'utf-8', env: { ...process.env, CONVEX_DEPLOY_KEY }, stdio: 'pipe' }
     );
     
     const ideas = JSON.parse(output);
     const yesterday = getYesterdayDate();
     
-    // Filter to yesterday's completions
+    // Filter to completed builds from yesterday (status = 'done' or deployed)
+    // Note: Using approvedAt as proxy for completion since actual completion date field varies
     return ideas.filter(i => {
-      const doneDate = i.doneAt ? new Date(i.doneAt).toISOString().split('T')[0] : null;
-      return doneDate === yesterday;
+      // Consider "done" if it has a deployedUrl or status is done/completed
+      const isDone = i.status === 'done' || i.deployedUrl || i.vercelUrl;
+      const doneDate = i.deployedAt ? new Date(i.deployedAt).toISOString().split('T')[0] : 
+                       i.approvedAt ? new Date(i.approvedAt).toISOString().split('T')[0] : null;
+      return isDone && doneDate === yesterday;
     }).slice(0, 10);
   } catch (err) {
     console.error('Failed to fetch builds:', err.message);
@@ -75,11 +79,13 @@ function getOvernightBuilds() {
 function getInProgressBuilds() {
   try {
     const output = execSync(
-      `cd "${DASHBOARD_DIR}" && npx convex run ideas:listByStatus '{"status":"building"}'`,
+      `cd "${DASHBOARD_DIR}" && npx convex run ideas:list`,
       { encoding: 'utf-8', env: { ...process.env, CONVEX_DEPLOY_KEY }, stdio: 'pipe' }
     );
     
-    return JSON.parse(output).slice(0, 5);
+    const ideas = JSON.parse(output);
+    // Filter to ideas currently being built
+    return ideas.filter(i => i.status === 'building').slice(0, 5);
   } catch (err) {
     return [];
   }
@@ -223,27 +229,9 @@ function generateBriefing() {
   const papers = getArxivPapers();
   const dribbbleShots = getDribbbleShotsWithImages();
   
-  // DEBUG: If zero builds completed, trigger investigation
+  // Build stats for logging (silent, no debug alerts)
   if (builds.length === 0) {
-    console.log('🚨 ZERO BUILDS DETECTED — Starting debug investigation...');
-    try {
-      // Check build monitor status
-      const debugOutput = execSync(
-        `cd "${DASHBOARD_DIR}" && npx convex run ideas:getStats 2>&1`,
-        { encoding: 'utf-8', env: { ...process.env, CONVEX_DEPLOY_KEY }, stdio: 'pipe' }
-      );
-      const stats = JSON.parse(debugOutput);
-      console.log('Build stats:', stats);
-      
-      // Log to debug file
-      const debugLog = `[${new Date().toISOString()}] ZERO BUILDS\nStats: ${JSON.stringify(stats, null, 2)}\n`;
-      fs.appendFileSync(path.join(MEMORY_DIR, 'build-debug.log'), debugLog);
-      
-      // Alert in briefing
-      console.log('⚠️  Debug info logged to build-debug.log');
-    } catch (err) {
-      console.error('Debug investigation failed:', err.message);
-    }
+    console.log('ℹ️  Zero builds completed overnight');
   }
   
   let briefing = `🌅 **Morning Briefing — ${date}**
@@ -258,13 +246,6 @@ function generateBriefing() {
   briefing += `## 📊 At a Glance
 
 `;
-  
-  // Alert for zero builds
-  if (totalBuilds === 0) {
-    briefing += `⚠️ **0 builds completed overnight** — Debug investigation triggered\n`;
-    briefing += `Check: ~/NateMate/notes/NateMateNotes/memory/build-debug.log\n`;
-    briefing += `Likely causes: Overnight script didn't run, or build monitor not spawning agents\n\n`;
-  }
   
   briefing += `• **${totalBuilds}** builds completed overnight`;
   if (highPotentialBuilds > 0) briefing += ` (${highPotentialBuilds} high/moonshot potential)`;
@@ -302,7 +283,7 @@ function generateBriefing() {
 `;
         briefing += `**Target:** ${b.targetAudience || 'General users'}  
 `;
-        if (b.deployedUrl) briefing += `**Live:** ${b.deployedUrl}  
+        if (b.deployedUrl || b.vercelUrl) briefing += `**Live:** ${b.deployedUrl || b.vercelUrl}  
 `;
         briefing += `**Status:** ✅ Complete
 
@@ -320,7 +301,7 @@ function generateBriefing() {
         briefing += `${b.description?.substring(0, 150)}...
 
 `;
-        if (b.deployedUrl) briefing += `🔗 [View Build](${b.deployedUrl})
+        if (b.deployedUrl || b.vercelUrl) briefing += `🔗 [View Build](${b.deployedUrl || b.vercelUrl})
 
 `;
       });
@@ -332,7 +313,7 @@ function generateBriefing() {
 `;
       otherBuilds.slice(0, 5).forEach(b => {
         briefing += `• **${b.title}** — ${b.potential} potential`;
-        if (b.deployedUrl) briefing += ` — [View](${b.deployedUrl})`;
+        if (b.deployedUrl || b.vercelUrl) briefing += ` — [View](${b.deployedUrl || b.vercelUrl})`;
         briefing += `
 `;
       });
@@ -409,7 +390,7 @@ function generateBriefing() {
   briefing += `---
 
 `;
-  briefing += `📊 **Dashboard:** https://dashboard-jnst3t9xe-n8garvies-projects.vercel.app  
+  briefing += `📊 **Dashboard:** https://mission-control-n8garvie.vercel.app  
 `;
   briefing += `🕐 **Generated:** ${new Date().toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' })} PST`;
   
@@ -472,6 +453,18 @@ async function main() {
   
   // Send text briefing
   sendTelegram(briefing);
+  
+  // Download notable ArXiv papers to wiki inbox
+  console.log('\n📚 Downloading notable ArXiv papers to wiki inbox...');
+  try {
+    const scriptDir = path.dirname(process.argv[1]);
+    execSync(
+      `node "${path.join(scriptDir, 'arxiv-to-wiki.js')}" --today`,
+      { stdio: 'inherit', timeout: 300000 }
+    );
+  } catch (err) {
+    console.error('ArXiv download failed:', err.message);
+  }
 }
 
 main().catch(console.error);

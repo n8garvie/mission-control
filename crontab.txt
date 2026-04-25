@@ -1,0 +1,33 @@
+# Nightly Idea Pipeline - Cron Jobs
+# Add these entries to your crontab (crontab -e)
+# Make sure to set the appropriate environment variables or source them
+
+# Scout Agent - Research Sprint
+# Runs daily at 6:00 PM PST (which is 02:00 UTC)
+0 2 * * * cd /home/n8garvie/.openclaw/workspace/mission-control && bash scripts/heartbeat-scout-ideas.sh >> logs/scout-cron.log 2>&1
+
+# Overnight Build System
+# Runs daily at 10:00 PM PST (which is 06:00 UTC)
+0 6 * * * cd /home/n8garvie/.openclaw/workspace/mission-control && bash scripts/overnight-build.sh >> logs/build-cron.log 2>&1
+
+# Alternative: If running on a system without persistent cron,
+# you can use a process manager like PM2 or systemd timers.
+
+# Environment variables needed (set in crontab or in a .env file):
+# CONVEX_URL=https://your-convex-url.convex.cloud
+# CONVEX_ADMIN_KEY=your-convex-admin-key
+# GITHUB_TOKEN=your-github-token
+# VERCEL_TOKEN=your-vercel-token
+# OPENCLAW_TOKEN=your-openclaw-token (optional)
+# TELEGRAM_BOT_TOKEN=your-telegram-bot-token (optional)
+# TELEGRAM_CHAT_ID=your-telegram-chat-id (optional)
+
+# To install these cron jobs:
+# 1. Run: crontab -e
+# 2. Copy the job entries above (adjust paths as needed)
+# 3. Save and exit
+# 4. Verify with: crontab -l
+
+# To monitor cron job output:
+# tail -f /home/n8garvie/.openclaw/workspace/mission-control/logs/scout-cron.log
+# tail -f /home/n8garvie/.openclaw/workspace/mission-control/logs/build-cron.log
