@@ -1,7 +1,7 @@
 # Mission Control - Project URLs & Configuration
 
 ## Production Dashboard
-**Primary URL:** https://mission-control-n8garvie.vercel.app
+**Primary URL:** https://mission-control-n8garvie-woad.vercel.app
 
 This is the main dashboard for reviewing ideas, approving builds, and monitoring the pipeline.
 
@@ -53,10 +53,10 @@ npx convex deploy
 
 ## Pages
 
-- **Home/Pipeline:** https://mission-control-n8garvie.vercel.app/
-- **Ideas Inbox:** https://mission-control-n8garvie.vercel.app/ideas
-- **Pipeline Review:** https://mission-control-n8garvie.vercel.app/pipeline
-- **Dashboard:** https://mission-control-n8garvie.vercel.app/dashboard
+- **Home/Pipeline:** https://mission-control-n8garvie-woad.vercel.app/
+- **Ideas Inbox:** https://mission-control-n8garvie-woad.vercel.app/ideas
+- **Pipeline Review:** https://mission-control-n8garvie-woad.vercel.app/pipeline
+- **Dashboard:** https://mission-control-n8garvie-woad.vercel.app/dashboard
 
 ## Last Updated
-April 22, 2026 - Updated all URLs to use mission-control-n8garvie.vercel.app
+April 22, 2026 - Updated all URLs to use mission-control-n8garvie-woad.vercel.app

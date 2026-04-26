@@ -200,7 +200,7 @@ async function main() {
   }
   
   log('\n✓ All agents spawned successfully!');
-  log(`Monitor progress: https://mission-control-n8garvie.vercel.app`);
+  log(`Monitor progress: https://mission-control-n8garvie-woad.vercel.app`);
 }
 
 main().catch(err => {

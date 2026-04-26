@@ -212,7 +212,7 @@ mission-control/
 ### View Dashboard
 ```bash
 # Production
-open https://mission-control-n8garvie.vercel.app
+open https://mission-control-n8garvie-woad.vercel.app
 
 # Local
 npm run dev

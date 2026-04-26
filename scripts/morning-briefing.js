@@ -390,7 +390,7 @@ function generateBriefing() {
   briefing += `---
 
 `;
-  briefing += `📊 **Dashboard:** https://mission-control-n8garvie.vercel.app  
+  briefing += `📊 **Dashboard:** https://mission-control-n8garvie-woad.vercel.app  
 `;
   briefing += `🕐 **Generated:** ${new Date().toLocaleTimeString('en-US', { timeZone: 'America/Los_Angeles' })} PST`;
   
