@@ -142,7 +142,7 @@ export const heartbeat = mutation({
       type: "agent_heartbeat",
       agentId: agent._id,
       agentName: agent.name,
-      message: `${agent.emoji} ${agent.name} checked in`,
+      message: `${agent.name} checked in`,
       createdAt: Date.now(),
     });
 

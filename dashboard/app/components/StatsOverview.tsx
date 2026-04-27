@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Icon } from "../lib/iconRegistry";
 
 interface StatsOverviewProps {
   totalAgents: number;
@@ -191,7 +192,8 @@ export default function StatsOverview({
       sublabel: `${Math.round((activeAgents / totalAgents) * 100)}% of team`,
       trend: agentsTrend,
       sparklineData: activeAgentsSparkline,
-      icon: "🤖",
+      iconName: "stats.agents" as const,
+      tone: "accent" as const,
       color: "var(--accent-500)",
     },
     {
@@ -200,7 +202,8 @@ export default function StatsOverview({
       sublabel: `${inProgressTasks} in progress`,
       trend: tasksTrendDisplay,
       sparklineData: openTasksSparkline,
-      icon: "📋",
+      iconName: "stats.tasks" as const,
+      tone: "info" as const,
       color: "var(--info-500)",
     },
     {
@@ -209,19 +212,21 @@ export default function StatsOverview({
       sublabel: "tasks shipped",
       trend: completedTrend,
       sparklineData: completedSparkline,
-      icon: "✅",
+      iconName: "stats.done" as const,
+      tone: "success" as const,
       color: "var(--success-500)",
     },
     {
       label: "Pending Ideas",
       value: animatedIdeas,
       sublabel: pendingIdeas > 5 ? "Needs review" : "On track",
-      trend: { 
-        text: pendingIdeas > 5 ? "⚠ Review" : "✓ Good", 
-        type: pendingIdeas > 5 ? "warning" as const : "positive" as const 
+      trend: {
+        text: pendingIdeas > 5 ? "Review" : "Good",
+        type: pendingIdeas > 5 ? "warning" as const : "positive" as const
       },
       sparklineData: pendingIdeasSparkline,
-      icon: "💡",
+      iconName: "stats.ideas" as const,
+      tone: "warning" as const,
       color: "var(--warning-500)",
     },
   ];
@@ -244,7 +249,9 @@ export default function StatsOverview({
         >
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-xl">{stat.icon}</span>
+              <span className={`icon-tile icon-tile--sm icon-tile--${stat.tone}`} aria-hidden>
+                <Icon name={stat.iconName} size={14} />
+              </span>
               <span className="text-caption">{stat.label}</span>
             </div>
             <Sparkline data={stat.sparklineData} color={stat.color} />

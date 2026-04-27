@@ -4,7 +4,11 @@
 
 PROJECT_NAME=$1
 BUILD_DIR=$2
-CONVEX_KEY="${CONVEX_DEPLOY_KEY:-dev:beloved-giraffe-115|eyJ2MiI6ImM3ZjkyNDliMDI4ODQ0OThhMDkwMWIyNjIzNDYwMjQ2In0=}"
+CONVEX_KEY="${CONVEX_DEPLOY_KEY}"
+if [ -z "$CONVEX_KEY" ]; then
+    echo "Error: CONVEX_DEPLOY_KEY env var not set" >&2
+    exit 1
+fi
 
 if [ -z "$PROJECT_NAME" ] || [ -z "$BUILD_DIR" ]; then
     echo "Usage: setup-vercel-deploy <project-name> <build-directory>"

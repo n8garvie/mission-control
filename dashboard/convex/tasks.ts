@@ -121,7 +121,7 @@ export const create = mutation({
 
     // Log activity
     const creator = args.createdBy ? await ctx.db.get(args.createdBy) : null;
-    const creatorName = creator ? `${creator.emoji} ${creator.name}` : "Nathan";
+    const creatorName = creator ? creator.name : "Nathan";
     
     await ctx.db.insert("activities", {
       type: "task_created",
@@ -260,7 +260,7 @@ export const assign = mutation({
     );
     const assigneeNames = assignees
       .filter(Boolean)
-      .map((a) => a!.emoji + " " + a!.name)
+      .map((a) => a!.name)
       .join(", ");
 
     await ctx.db.insert("activities", {

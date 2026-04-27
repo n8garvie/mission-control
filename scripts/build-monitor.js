@@ -16,26 +16,23 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// Load secrets first for CONVEX_DEPLOY_KEY
-const SECRETS_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/config/secrets.json';
-let SECRETS = {};
-if (fs.existsSync(SECRETS_FILE)) {
-  SECRETS = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf-8'));
-}
-
-const CONVEX_DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY || SECRETS.convex?.deployKey || 'dev:beloved-giraffe-115|eyJ2MiI6ImM3ZjkyNDliMDI4ODQ0OThhMDkwMWIyNjIzNDYwMjQ2In0=';
-const DASHBOARD_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/dashboard';
-const BUILDS_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/builds';
-const NODE_BIN = '/home/n8garvie/.nvm/versions/node/v22.22.0/bin';
-const MAX_CONCURRENT_BUILDS = 2;
-
-// Load secure environment variables from centralized secrets file
+// Load secrets file (provides defaults for CONVEX_DEPLOY_KEY, GITHUB_TOKEN, VERCEL_TOKEN, etc.)
 const SECRETS_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/config/secrets.json';
 let SECRETS = {};
 if (fs.existsSync(SECRETS_FILE)) {
   SECRETS = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf-8'));
   console.log(`[Build Monitor] Loaded secrets from ${SECRETS_FILE}`);
 }
+
+const CONVEX_DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY || SECRETS.convex?.deployKey;
+if (!CONVEX_DEPLOY_KEY) {
+  console.error('[Build Monitor] CONVEX_DEPLOY_KEY missing. Set the env var or populate config/secrets.json.');
+  process.exit(1);
+}
+const DASHBOARD_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/dashboard';
+const BUILDS_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/builds';
+const NODE_BIN = '/home/n8garvie/.nvm/versions/node/v22.22.0/bin';
+const MAX_CONCURRENT_BUILDS = 2;
 
 // Backwards compatibility: also load from .env.missioncontrol if it exists
 const SECURE_ENV_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/.env.missioncontrol';
@@ -103,6 +100,46 @@ const AGENTS = {
 // Pipeline order — agents run sequentially, then deploy
 const PIPELINE = ['forge', 'pixel', 'echo'];
 
+// Concurrency lock — prevent two cron firings from racing each other
+fs.mkdirSync(BUILDS_DIR, { recursive: true });
+const LOCK_FILE = path.join(BUILDS_DIR, '.build-monitor.lock');
+const STALE_LOCK_MS = 3 * 60 * 60 * 1000; // 3h: longer than the longest agent timeout (2400s pixel)
+
+try {
+  fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: 'wx' });
+} catch (lockErr) {
+  if (lockErr.code === 'EEXIST') {
+    let stale = false;
+    try {
+      const stat = fs.statSync(LOCK_FILE);
+      if (Date.now() - stat.mtimeMs > STALE_LOCK_MS) stale = true;
+    } catch (statErr) {
+      // Lock file vanished between our open and stat; treat as not held.
+      stale = true;
+    }
+    if (stale) {
+      console.log(`[Build Monitor] Reclaiming stale lock at ${LOCK_FILE}`);
+      try { fs.unlinkSync(LOCK_FILE); } catch (unlinkErr) { /* fall through, retry write */ }
+      try {
+        fs.writeFileSync(LOCK_FILE, String(process.pid), { flag: 'wx' });
+      } catch (retryErr) {
+        console.log('[Build Monitor] Failed to reclaim lock, exiting');
+        process.exit(0);
+      }
+    } else {
+      console.log('[Build Monitor] Another build-monitor is running, exiting');
+      process.exit(0);
+    }
+  } else {
+    throw lockErr;
+  }
+}
+
+const releaseLock = () => { try { fs.unlinkSync(LOCK_FILE); } catch (err) { /* already gone */ } };
+process.on('exit', releaseLock);
+process.on('SIGINT', () => { releaseLock(); process.exit(130); });
+process.on('SIGTERM', () => { releaseLock(); process.exit(143); });
+
 function log(msg) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
@@ -144,10 +181,13 @@ function checkAgentStatus(ideaId, agentName) {
         log(`  ${agentName} task is stale (${Math.round(ageMs / 60000)}min old) — will re-spawn`);
         return 'stale';
       }
-    } catch {}
+    } catch (err) {
+      log(`  ${agentName} task file vanished during stat (${err.message}); treating as stale`);
+      return 'stale';
+    }
     return 'spawned';
   }
-  
+
   return 'pending';
 }
 
@@ -167,10 +207,13 @@ function checkIntegrationStatus(ideaId) {
       if (ageMs > 2 * 60 * 60 * 1000) {
         return 'stale';
       }
-    } catch {}
+    } catch (err) {
+      log(`  integrator task file vanished during stat (${err.message}); treating as stale`);
+      return 'stale';
+    }
     return 'spawned';
   }
-  
+
   return 'pending';
 }
 
@@ -259,7 +302,9 @@ COMPLETION.md is MANDATORY — the pipeline cannot advance without it.`;
       taskData.error = err.message.substring(0, 500);
       taskData.errorAt = new Date().toISOString();
       fs.writeFileSync(path.join(buildDir, `${agentName}-task.json`), JSON.stringify(taskData, null, 2));
-    } catch {}
+    } catch (writeErr) {
+      log(`  Failed to record ${agentName} error to task file: ${writeErr.message}`);
+    }
     return false;
   }
 }
@@ -341,7 +386,9 @@ The final build MUST be deployable to Vercel or Netlify.`;
       taskData.error = err.message.substring(0, 500);
       taskData.errorAt = new Date().toISOString();
       fs.writeFileSync(path.join(buildDir, 'integrator-task.json'), JSON.stringify(taskData, null, 2));
-    } catch {}
+    } catch (writeErr) {
+      log(`  Failed to record integrator error to task file: ${writeErr.message}`);
+    }
     return false;
   }
 }
@@ -408,7 +455,9 @@ async function captureScreenshot(idea, finalDir) {
   }
   
   if (!serverReady) {
-    try { process.kill(-serverProcess.pid); } catch {}
+    try { process.kill(-serverProcess.pid); } catch (killErr) {
+      log(`  dev server cleanup: kill failed (${killErr.code || killErr.message})`);
+    }
     return { success: false, error: 'Server failed to start' };
   }
   
@@ -420,7 +469,9 @@ async function captureScreenshot(idea, finalDir) {
     );
     
     // Stop server
-    try { process.kill(-serverProcess.pid); } catch {}
+    try { process.kill(-serverProcess.pid); } catch (killErr) {
+      log(`  dev server cleanup after screenshot: kill failed (${killErr.code || killErr.message})`);
+    }
     
     // Add to README
     const readmePath = path.join(codeDir, 'README.md');
@@ -446,7 +497,9 @@ async function captureScreenshot(idea, finalDir) {
     
     return { success: true, path: path.join(codeDir, 'screenshot.png') };
   } catch (err) {
-    try { process.kill(-serverProcess.pid); } catch {}
+    try { process.kill(-serverProcess.pid); } catch (killErr) {
+      log(`  dev server cleanup after screenshot error: kill failed (${killErr.code || killErr.message})`);
+    }
     return { success: false, error: err.message };
   }
 }
@@ -785,7 +838,9 @@ function notifyNathan(title, ideaId, deployStatus = null) {
     if (fs.existsSync(forgePath)) {
       fullSummary = fs.readFileSync(forgePath, 'utf-8');
     }
-  } catch {}
+  } catch (readErr) {
+    log(`  Could not read forge COMPLETION.md for summary: ${readErr.message}`);
+  }
   
   // Extract key sections
   const whatBuiltMatch = fullSummary.match(/## What Was Built\s*\n\s*\*\*([^*]+)\*\*/);
@@ -835,23 +890,30 @@ ${whatBuilt}
 ${techStack ? `🛠 ${techStack}` : ''}${deployInfo}`;
 
   log(`  Message length: ${msg.length} chars`);
-  
+
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || SECRETS.telegram?.botToken;
+  const chatId = process.env.TELEGRAM_CHAT_ID || SECRETS.telegram?.chatId;
+  if (!botToken || !chatId) {
+    log('Telegram not configured (TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID), skipping notification');
+    return;
+  }
+
   try {
     const msgFile = path.join(buildDir, '.notify-msg.txt');
     fs.writeFileSync(msgFile, msg);
-    
+
     execSync(
-      `curl -s -X POST "https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN || '8236998222:AAE72SLm6G45dFGYOhV3tFf-JHSCUF9f9OM'}/sendMessage" ` +
-      `-d "chat_id=${process.env.TELEGRAM_CHAT_ID || '7923502221'}" ` +
+      `curl -s -X POST "https://api.telegram.org/bot${botToken}/sendMessage" ` +
+      `-d "chat_id=${chatId}" ` +
       `-d "parse_mode=Markdown" ` +
       `--data-urlencode "text@${msgFile}"`,
       { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
     );
-    
+
     fs.unlinkSync(msgFile);
-    log(`📬 Notification sent to Nathan for: ${title}`);
+    log(`Notification sent for: ${title}`);
   } catch (err) {
-    log(`⚠️ Notification failed: ${err.message.substring(0, 200)}`);
+    log(`Notification failed: ${err.message.substring(0, 200)}`);
     log(`  Message was: ${msg.substring(0, 300)}...`);
   }
 }
@@ -952,6 +1014,23 @@ async function processBuilding() {
   return buildingIdeas.length;
 }
 
+function notifySpawnStart(idea) {
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || SECRETS.telegram?.botToken;
+  const chatId = process.env.TELEGRAM_CHAT_ID || SECRETS.telegram?.chatId;
+  if (!botToken || !chatId) return;
+  const priority = idea.buildPriority === 'high' ? ' (manual)' : '';
+  const text = `Build started${priority}: ${idea.title}`;
+  try {
+    execSync(
+      `curl -s -X POST "https://api.telegram.org/bot${botToken}/sendMessage" ` +
+      `-d "chat_id=${chatId}" --data-urlencode "text=${text}"`,
+      { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
+    );
+  } catch (err) {
+    log(`  Spawn-start notification failed: ${err.message.substring(0, 100)}`);
+  }
+}
+
 function pickNextApproved() {
   const building = convexRun('ideas:listByStatus', { status: 'building' });
   if (building && building.length >= MAX_CONCURRENT_BUILDS) {
@@ -965,17 +1044,65 @@ function pickNextApproved() {
     return;
   }
 
+  // Visible queue trace — easier to answer "did the cron see my idea?"
+  log(`Approved queue (${approved.length}):`);
+  approved.slice(0, 5).forEach((q, i) => {
+    const flag = q.buildPriority === 'high' ? ' [HIGH]' : '';
+    log(`  ${i + 1}. ${q.title}${flag} (approved ${new Date(q.approvedAt || q.createdAt).toISOString()})`);
+  });
+  if (approved.length > 5) log(`  ...and ${approved.length - 5} more`);
+
   const idea = approved[0];
-  log(`\nPicking up approved idea: ${idea.title}`);
+  log(`\nPicking up approved idea: ${idea.title} (priority=${idea.buildPriority || 'normal'})`);
 
   const result = convexRun('ideas:markBuilding', { ideaId: idea._id });
   if (result) {
     log(`✓ ${idea.title} → building`);
+    notifySpawnStart(idea);
+  }
+}
+
+// Detect builds that have been stuck in an active stage past the longest
+// agent timeout, and reset them to approved with lastBuildError populated so
+// the user can re-fire from the dashboard. Called from main().
+function escalateStuckBuilds() {
+  const STUCK_AFTER_MS = 3 * 60 * 60 * 1000; // 3h: longer than the longest agent timeout
+  const building = convexRun('ideas:listByStatus', { status: 'building' });
+  if (!building || building.length === 0) return;
+
+  const now = Date.now();
+  for (const idea of building) {
+    const startedAt = idea.buildStartedAt || idea.lastActivityAt || 0;
+    if (!startedAt || now - startedAt < STUCK_AFTER_MS) continue;
+
+    const ageMin = Math.round((now - startedAt) / 60000);
+    const reason = `stuck in ${idea.buildStage} for ${ageMin}min (>${Math.round(STUCK_AFTER_MS / 60000)}min)`;
+    log(`Escalating stuck build: ${idea.title} — ${reason}`);
+    const ok = convexRun('ideas:markBuildFailed', { ideaId: idea._id, reason });
+    if (ok) {
+      const botToken = process.env.TELEGRAM_BOT_TOKEN || SECRETS.telegram?.botToken;
+      const chatId = process.env.TELEGRAM_CHAT_ID || SECRETS.telegram?.chatId;
+      if (botToken && chatId) {
+        try {
+          execSync(
+            `curl -s -X POST "https://api.telegram.org/bot${botToken}/sendMessage" ` +
+            `-d "chat_id=${chatId}" --data-urlencode "text=Build stuck and reset: ${idea.title} — ${reason}"`,
+            { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
+          );
+        } catch (err) {
+          log(`  Stuck-build notification failed: ${err.message.substring(0, 100)}`);
+        }
+      }
+    }
   }
 }
 
 async function main() {
   log('=== Build Monitor Run ===');
+
+  // Reset any builds that have been stuck past the longest agent timeout.
+  // This must run before processBuilding so escalated ideas don't get re-handled.
+  escalateStuckBuilds();
 
   const buildingCount = await processBuilding();
 

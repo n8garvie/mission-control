@@ -12,10 +12,27 @@
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const llm = require('./lib/llm');
 
 const SCOUT_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/agents/scout-ideas';
 const DASHBOARD_DIR = '/home/n8garvie/.openclaw/workspace/mission-control/dashboard';
-const CONVEX_DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY || 'dev:beloved-giraffe-115|eyJ2MiI6ImM3ZjkyNDliMDI4ODQ0OThhMDkwMWIyNjIzNDYwMjQ2In0=';
+
+// Optional secrets file for local dev convenience
+const SECRETS_FILE = '/home/n8garvie/.openclaw/workspace/mission-control/config/secrets.json';
+let SECRETS = {};
+if (fs.existsSync(SECRETS_FILE)) {
+  try { SECRETS = JSON.parse(fs.readFileSync(SECRETS_FILE, 'utf-8')); } catch (err) {
+    console.error(`Failed to parse ${SECRETS_FILE}: ${err.message}`);
+  }
+}
+
+const CONVEX_DEPLOY_KEY = process.env.CONVEX_DEPLOY_KEY || SECRETS.convex?.deployKey;
+if (!CONVEX_DEPLOY_KEY) {
+  console.error('CONVEX_DEPLOY_KEY missing. Set the env var or populate config/secrets.json.');
+  process.exit(1);
+}
+
+const SCOUT_DRY_RUN = process.env.SCOUT_DRY_RUN === '1' || process.env.SCOUT_DRY_RUN === 'true';
 
 // Diverse sources to search
 const SOURCES = {
@@ -63,13 +80,17 @@ const SOURCES = {
 
 async function fetchRedditPosts(subreddit, query, limit = 5) {
   try {
-    const url = `https://old.reddit.com/r/${subreddit}/new.json?limit=${limit}`;
+    // Honour the configured search query when present; otherwise fall back to /new
+    const url = query
+      ? `https://old.reddit.com/r/${subreddit}/search.json?q=${encodeURIComponent(query)}&restrict_sr=on&sort=new&limit=${limit}`
+      : `https://old.reddit.com/r/${subreddit}/new.json?limit=${limit}`;
+
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; NateMateBot/1.0)' }
     });
-    
+
     if (!response.ok) return [];
-    
+
     const data = await response.json();
     return (data?.data?.children || []).map(post => ({
       title: post.data.title,
@@ -80,7 +101,7 @@ async function fetchRedditPosts(subreddit, query, limit = 5) {
       source: 'reddit'
     }));
   } catch (err) {
-    console.error(`  ⚠️ Reddit r/${subreddit} failed:`, err.message);
+    console.error(`  Reddit r/${subreddit} failed:`, err.message);
     return [];
   }
 }
@@ -107,18 +128,40 @@ async function fetchHackerNews(query, limit = 5) {
 }
 
 async function fetchProductHunt(category) {
+  // ProductHunt requires a developer token + GraphQL request. When PH_TOKEN is
+  // not set we no-op rather than emit fake placeholder rows that pollute the
+  // research digest. Wire up GraphQL here when PRODUCTHUNT_TOKEN is configured.
+  const token = process.env.PRODUCTHUNT_TOKEN || SECRETS.producthunt?.token;
+  if (!token) return [];
+
   try {
-    // PH doesn't have a free public API anymore, use their feed
-    const url = `https://www.producthunt.com/topics/${category}`;
-    // For now, just note the category - in production, use PH API with token
-    return [{
-      title: `[PH Category: ${category}]`,
-      selftext: `Check trending products in ${category}`,
-      score: 0,
-      url: url,
-      source: 'producthunt'
-    }];
+    const response = await fetch('https://api.producthunt.com/v2/api/graphql', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        query: `query ($cat: String!) {
+          posts(topic: $cat, order: VOTES, first: 10) {
+            edges { node { name tagline url votesCount } }
+          }
+        }`,
+        variables: { cat: category },
+      }),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    const edges = data?.data?.posts?.edges || [];
+    return edges.map(({ node }) => ({
+      title: node.name,
+      selftext: node.tagline || '',
+      score: node.votesCount || 0,
+      url: node.url,
+      source: 'producthunt',
+    }));
   } catch (err) {
+    console.error('  ProductHunt failed:', err.message);
     return [];
   }
 }
@@ -143,10 +186,14 @@ async function fetchLobsters(limit = 10) {
 
 async function fetchGitHubTrending() {
   try {
-    // Use GitHub's search API for trending repos
-    const response = await fetch('https://api.github.com/search/repositories?q=created:>2026-02-09&sort=stars&order=desc&per_page=10', {
-      headers: { 'Accept': 'application/vnd.github.v3+json' }
-    });
+    // Trending = high-star repos created in the last 7 days. The original code
+    // had a hardcoded date that goes stale on day one; this stays current.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+      .toISOString().slice(0, 10);
+    const response = await fetch(
+      `https://api.github.com/search/repositories?q=created:>${sevenDaysAgo}&sort=stars&order=desc&per_page=10`,
+      { headers: { 'Accept': 'application/vnd.github.v3+json' } }
+    );
     if (!response.ok) return [];
     const data = await response.json();
     return (data.items || []).map(repo => ({
@@ -163,22 +210,22 @@ async function fetchGitHubTrending() {
 }
 
 async function gatherResearch() {
-  console.log('🔭 Scout: Gathering research from across the web...\n');
-  
+  console.log('Scout: gathering research from across the web...\n');
+
   const allPosts = [];
-  
-  // Reddit research (may be rate limited)
-  console.log('📱 Reddit (14 subreddits)...');
-  for (const { sub, search } of SOURCES.reddit.slice(0, 6)) { // Only first 6 to avoid rate limits
+
+  // Reddit. Configurable via SCOUT_REDDIT_LIMIT (default: scan all configured subs).
+  const redditLimit = parseInt(process.env.SCOUT_REDDIT_LIMIT || `${SOURCES.reddit.length}`, 10);
+  console.log(`Reddit (${redditLimit}/${SOURCES.reddit.length} subreddits)...`);
+  for (const { sub, search } of SOURCES.reddit.slice(0, redditLimit)) {
     process.stdout.write(`  r/${sub}... `);
     const posts = await fetchRedditPosts(sub, search, 5);
     allPosts.push(...posts);
     console.log(`${posts.length} posts`);
-    await sleep(2000); // Slower rate limit
+    await sleep(2000); // gentle rate limit
   }
   
-  // Hacker News research
-  console.log('\n🟧 Hacker News...');
+  console.log('\nHacker News...');
   for (const query of SOURCES.hackerNews) {
     process.stdout.write(`  "${query}"... `);
     const posts = await fetchHackerNews(query, 8);
@@ -186,22 +233,32 @@ async function gatherResearch() {
     console.log(`${posts.length} posts`);
     await sleep(500);
   }
-  
-  // Lobsters
-  console.log('\n🦞 Lobsters...');
+
+  console.log('\nLobsters...');
   process.stdout.write('  Hottest... ');
   const lobsterPosts = await fetchLobsters(10);
   allPosts.push(...lobsterPosts);
   console.log(`${lobsterPosts.length} posts`);
-  
-  // GitHub Trending
-  console.log('\n🐙 GitHub Trending...');
-  process.stdout.write('  This week... ');
+
+  console.log('\nGitHub trending...');
+  process.stdout.write('  Last 7 days... ');
   const ghPosts = await fetchGitHubTrending();
   allPosts.push(...ghPosts);
   console.log(`${ghPosts.length} repos`);
-  
-  console.log(`\n📊 Total posts gathered: ${allPosts.length}`);
+
+  // ProductHunt only fires when a token is configured.
+  if (process.env.PRODUCTHUNT_TOKEN || SECRETS.producthunt?.token) {
+    console.log('\nProduct Hunt...');
+    for (const cat of SOURCES.productHunt) {
+      process.stdout.write(`  ${cat}... `);
+      const phPosts = await fetchProductHunt(cat);
+      allPosts.push(...phPosts);
+      console.log(`${phPosts.length} posts`);
+      await sleep(500);
+    }
+  }
+
+  console.log(`\nTotal posts gathered: ${allPosts.length}`);
   return allPosts;
 }
 
@@ -229,10 +286,59 @@ async function getRejectedIdeas() {
   }
 }
 
+// Tokenize a string into a normalized bag for similarity comparison.
+const STOPWORDS = new Set(['a','an','the','of','for','to','and','in','on','with','at','by','as','is','are','app','tool','platform']);
+function tokenize(s) {
+  return new Set(
+    String(s).toLowerCase()
+      .replace(/[^a-z0-9 ]+/g, ' ')
+      .split(/\s+/)
+      .filter(t => t.length > 2 && !STOPWORDS.has(t))
+  );
+}
+function jaccard(a, b) {
+  if (a.size === 0 || b.size === 0) return 0;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter++;
+  return inter / (a.size + b.size - inter);
+}
+function isDuplicate(title, knownTitles, threshold = 0.6) {
+  const t = tokenize(title);
+  for (const k of knownTitles) {
+    if (jaccard(t, tokenize(k)) >= threshold) return k;
+  }
+  return null;
+}
+
+// Pick the 1-3 strongest source posts that inspired a given idea — used as
+// review evidence in the dashboard so the human reviewer can click through.
+function pickEvidence(idea, posts, max = 3) {
+  const ideaTokens = tokenize(`${idea.title} ${idea.description} ${idea.mvpScope}`);
+  return posts
+    .map(p => ({ post: p, score: jaccard(tokenize(p.title + ' ' + (p.selftext || '')), ideaTokens) * (1 + Math.log10(1 + Math.max(0, p.score || 0))) }))
+    .filter(x => x.score > 0.05)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, max)
+    .map(({ post }) => ({
+      sourceUrl:    post.url || '',
+      sourceTitle:  (post.title || '').substring(0, 200),
+      score:        post.score || 0,
+      capturedAt:   Date.now(),
+    }));
+}
+
+// Quality gate: drop ideas that look like placeholders.
+function passesQualityBar(idea) {
+  if (!idea.title || idea.title.length < 4) return false;
+  if (!idea.targetAudience || idea.targetAudience.length < 20) return false;
+  if (!idea.mvpScope || idea.mvpScope.length < 30) return false;
+  if (/^TBD/i.test(idea.mvpScope.trim())) return false;
+  return true;
+}
+
 async function generateIdeasFromResearch(posts, existingTitles, rejectedTitles) {
-  console.log('\n🧠 Scout: Piping research through Claude for synthesis...\n');
-  
-  // Build research digest for Claude
+  console.log('\nScout: synthesizing research via LLM...\n');
+
   const researchDigest = posts
     .filter(p => p.title && p.title.length > 10)
     .slice(0, 50)
@@ -242,13 +348,13 @@ async function generateIdeasFromResearch(posts, existingTitles, rejectedTitles) 
       return line;
     })
     .join('\n\n');
-  
+
   const existingList = existingTitles.length > 0 ? existingTitles.join(', ') : 'None';
   const rejectedList = rejectedTitles.length > 0 ? rejectedTitles.join(', ') : 'None';
-  
-  const prompt = `You are Scout, an AI product idea researcher. You've just scanned the web and found these posts from Reddit, Hacker News, Lobsters, and GitHub Trending.
 
-Your job: Synthesize these raw signals into 5-7 **concrete, buildable product ideas** that a solo developer could ship as a side project in 1-2 weeks.
+  const prompt = `You are Scout, an AI product idea researcher. You've just scanned posts from Reddit, Hacker News, Lobsters, GitHub Trending, and Product Hunt.
+
+Your job: Synthesize these raw signals into 5-7 concrete, buildable product ideas that a solo developer could ship as a side project in 1-2 weeks.
 
 ## Research Digest
 
@@ -256,7 +362,7 @@ ${researchDigest}
 
 ## Context
 
-- The builder is Nathan, a senior product design director at Meta who builds side projects
+- The builder is Nathan, a senior product design director who builds side projects
 - He's interested in: watches, Porsche 997.2, espresso, smart home, AI tools, design tools, finance
 - He values: clean UI, data-driven tools, things that save time, premium feel
 - He builds with: Next.js, Convex, Vercel, Tailwind, AI APIs
@@ -270,13 +376,13 @@ ${rejectedList}
 ## Requirements
 
 For each idea, return a JSON array. Each idea must have:
-- **title**: Short, catchy product name (3-5 words max)
-- **description**: 2-3 sentence pitch explaining the problem and solution
-- **targetAudience**: Who specifically would use this
-- **mvpScope**: What the MVP includes (be specific: "X page with Y feature + Z integration")
-- **potential**: "low" | "medium" | "high" | "moonshot"
-- **source**: Which post(s) inspired this (URL or description)
-- **tags**: Array of 2-4 relevant tags
+- title: Short, catchy product name (3-5 words max)
+- description: 2-3 sentence pitch explaining the problem and solution
+- targetAudience: Who specifically would use this (concrete persona, 20+ chars)
+- mvpScope: What the MVP includes (be specific: "X page with Y feature + Z integration", 30+ chars)
+- potential: "low" | "medium" | "high" | "moonshot"
+- source: Which post(s) inspired this (URL or description)
+- tags: Array of 2-4 relevant tags
 
 ## Rules
 1. DO NOT just restate post titles. Synthesize multiple signals into novel ideas.
@@ -288,92 +394,80 @@ For each idea, return a JSON array. Each idea must have:
 
 Return ONLY a valid JSON array. No markdown, no explanation.`;
 
+  let text;
   try {
-    // Get API key from OpenClaw gateway config
-    let apiKey = process.env.ANTHROPIC_API_KEY;
-    
-    if (!apiKey) {
-      // Try to get from OpenClaw config
-      try {
-        const configOutput = execSync('openclaw config get 2>/dev/null || true', { encoding: 'utf-8' });
-        const match = configOutput.match(/ANTHROPIC_API_KEY[=:]\s*(\S+)/);
-        if (match) apiKey = match[1];
-      } catch {}
-    }
-    
-    if (!apiKey) {
-      // Try reading from gateway auth
-      try {
-        const authFile = '/home/n8garvie/.openclaw/agents/main/agent/auth-profiles.json';
-        if (fs.existsSync(authFile)) {
-          const auth = JSON.parse(fs.readFileSync(authFile, 'utf-8'));
-          apiKey = auth?.profiles?.['anthropic:default']?.key;
-        }
-      } catch {}
-    }
-    
-    if (!apiKey) {
-      console.log('  ⚠️ No Anthropic API key found. Falling back to basic extraction.');
-      return fallbackExtract(posts, existingTitles, rejectedTitles);
-    }
-    
-    console.log('  📡 Calling Claude Sonnet...');
-    
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 3000,
-        messages: [{ role: 'user', content: prompt }]
-      })
+    const result = await llm.complete({
+      role: 'balanced',
+      messages: [{ role: 'user', content: prompt }],
+      maxTokens: 3000,
+      temperature: 0.7,
     });
-    
-    if (!response.ok) {
-      const err = await response.text();
-      console.error(`  ❌ Claude API error: ${err.substring(0, 200)}`);
-      return fallbackExtract(posts, existingTitles, rejectedTitles);
-    }
-    
-    const result = await response.json();
-    const text = result.content[0].text.trim();
-    
-    // Parse JSON response
-    let ideas;
-    try {
-      // Handle potential markdown wrapping
-      const jsonStr = text.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
-      ideas = JSON.parse(jsonStr);
-    } catch (parseErr) {
-      console.error('  ❌ Failed to parse Claude response as JSON');
-      console.error('  Response:', text.substring(0, 200));
-      return fallbackExtract(posts, existingTitles, rejectedTitles);
-    }
-    
-    // Validate and clean ideas
-    const validIdeas = ideas
-      .filter(idea => idea.title && idea.description && idea.targetAudience)
-      .map(idea => ({
+    text = result.text;
+    console.log(`  LLM ok (${result.usage.inputTokens}in/${result.usage.outputTokens}out)`);
+  } catch (err) {
+    console.error(`  LLM call failed: ${err.message}`);
+    return fallbackExtract(posts, existingTitles, rejectedTitles);
+  }
+
+  let ideas;
+  try {
+    const jsonStr = text.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
+    ideas = JSON.parse(jsonStr);
+  } catch (parseErr) {
+    console.error('  Failed to parse LLM response as JSON');
+    console.error('  Response:', text.substring(0, 200));
+    return fallbackExtract(posts, existingTitles, rejectedTitles);
+  }
+
+  const knownTitles = [...existingTitles, ...rejectedTitles];
+  const dropped = { dup: 0, quality: 0 };
+
+  const cleaned = ideas
+    .filter(idea => idea.title && idea.description && idea.targetAudience)
+    .map(idea => {
+      const evidence = pickEvidence(idea, posts);
+      const discoverySources = Array.from(new Set(
+        posts.length > 0
+          ? evidence.map(e => {
+              if (/reddit\.com/.test(e.sourceUrl)) return 'reddit';
+              if (/news\.ycombinator/.test(e.sourceUrl)) return 'hackernews';
+              if (/lobste\.rs/.test(e.sourceUrl)) return 'lobsters';
+              if (/github\.com/.test(e.sourceUrl)) return 'github';
+              if (/producthunt\.com/.test(e.sourceUrl)) return 'producthunt';
+              return null;
+            }).filter(Boolean)
+          : []
+      ));
+      return {
         title: idea.title.substring(0, 80),
         description: idea.description.substring(0, 500),
         targetAudience: idea.targetAudience.substring(0, 200),
-        mvpScope: (idea.mvpScope || 'TBD').substring(0, 300),
+        mvpScope: (idea.mvpScope || '').substring(0, 300),
         potential: ['low', 'medium', 'high', 'moonshot'].includes(idea.potential) ? idea.potential : 'medium',
         source: (idea.source || 'web-research').substring(0, 300),
-        tags: Array.isArray(idea.tags) ? idea.tags.slice(0, 5) : ['web-research']
-      }));
-    
-    console.log(`  ✅ Claude generated ${validIdeas.length} synthesized ideas`);
-    return validIdeas;
-    
-  } catch (err) {
-    console.error('  ❌ Claude synthesis failed:', err.message);
-    return fallbackExtract(posts, existingTitles, rejectedTitles);
-  }
+        tags: Array.isArray(idea.tags) ? idea.tags.slice(0, 5) : ['web-research'],
+        evidence,
+        discoverySources,
+      };
+    })
+    .filter(idea => {
+      const dup = isDuplicate(idea.title, knownTitles);
+      if (dup) {
+        console.log(`  Dropping duplicate idea "${idea.title}" (matched "${dup}")`);
+        dropped.dup++;
+        return false;
+      }
+      if (!passesQualityBar(idea)) {
+        console.log(`  Dropping low-quality idea "${idea.title}" (audience/mvp too thin)`);
+        dropped.quality++;
+        return false;
+      }
+      knownTitles.push(idea.title);
+      return true;
+    });
+
+  console.log(`  Kept ${cleaned.length} ideas (dropped ${dropped.dup} duplicates, ${dropped.quality} below quality bar)`);
+  return cleaned;
 }
 
 // Fallback: basic extraction without Claude
@@ -396,15 +490,20 @@ function fallbackExtract(posts, existingTitles, rejectedTitles) {
     }));
 }
 
-async function saveAndBuildIdeas(ideas) {
-  console.log(`\n💾 Saving ${ideas.length} ideas and triggering builds...\n`);
-  
+async function saveScoutedIdeas(ideas) {
+  if (SCOUT_DRY_RUN) {
+    console.log(`\n[dry-run] Would save ${ideas.length} ideas with pipelineStatus="scouted":`);
+    ideas.forEach((idea, i) => {
+      console.log(`  ${i + 1}. ${idea.title} (${idea.potential}) — ${idea.targetAudience}`);
+    });
+    return ideas.length;
+  }
+
+  console.log(`\nSaving ${ideas.length} ideas as scouted (awaiting human review)...\n`);
+
   let saved = 0;
-  const approvedIdeaIds = [];
-  
   for (const idea of ideas) {
     try {
-      // Step 1: Create idea (pending status)
       const args = JSON.stringify({
         title: idea.title,
         description: idea.description,
@@ -412,47 +511,23 @@ async function saveAndBuildIdeas(ideas) {
         mvpScope: idea.mvpScope,
         potential: idea.potential,
         source: idea.source,
-        tags: idea.tags
+        tags: idea.tags,
+        evidence: idea.evidence,
+        discoverySources: idea.discoverySources,
       });
-      
-      const output = execSync(
+
+      execSync(
         `cd "${DASHBOARD_DIR}" && npx convex run ideas:create '${args.replace(/'/g, "'\\''")}'`,
         { encoding: 'utf-8', env: { ...process.env, CONVEX_DEPLOY_KEY }, stdio: 'pipe' }
       );
-      
-      const result = JSON.parse(output);
-      const ideaId = result?._id || result;
-      
-      if (ideaId) {
-        // Step 2: Auto-approve (skip manual approval)
-        execSync(
-          `cd "${DASHBOARD_DIR}" && npx convex run ideas:approve '{"ideaId":"${ideaId}"}'`,
-          { encoding: 'utf-8', env: { ...process.env, CONVEX_DEPLOY_KEY }, stdio: 'pipe' }
-        );
-        
-        approvedIdeaIds.push(ideaId);
-        console.log(`  ✅ ${idea.title} (approved for build)`);
-        saved++;
-      }
+
+      console.log(`  ${idea.title} — scouted (awaiting review)`);
+      saved++;
     } catch (err) {
-      console.error(`  ❌ Failed: ${idea.title} - ${err.message.substring(0, 100)}`);
+      console.error(`  Failed: ${idea.title} - ${err.message.substring(0, 100)}`);
     }
   }
-  
-  // Step 3: Trigger overnight build immediately if we have approved ideas
-  if (approvedIdeaIds.length > 0) {
-    console.log(`\n🔨 Triggering builds for ${approvedIdeaIds.length} ideas...`);
-    try {
-      execSync(
-        `cd "/home/n8garvie/.openclaw/workspace/mission-control" && bash scripts/overnight-build.sh`,
-        { encoding: 'utf-8', env: { ...process.env, CONVEX_DEPLOY_KEY }, stdio: 'pipe' }
-      );
-      console.log(`  ✅ Build triggered`);
-    } catch (err) {
-      console.error(`  ⚠️ Build trigger failed: ${err.message.substring(0, 100)}`);
-    }
-  }
-  
+
   return saved;
 }
 
@@ -461,60 +536,72 @@ function sleep(ms) {
 }
 
 async function main() {
-  console.log('╔════════════════════════════════════════════════════════╗');
-  console.log('║  🔭 Scout Agent - Silent Mode                          ║');
-  console.log('║  Auto-builds ideas • No approval needed                ║');
-  console.log('╚════════════════════════════════════════════════════════╝\n');
+  const mode = SCOUT_DRY_RUN ? 'dry-run' : 'live';
+  console.log('Scout Agent — Idea research sprint');
+  console.log(`Mode: ${mode} (ideas are saved as "scouted" awaiting human approval)`);
   console.log(`Time: ${new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })}\n`);
-  
+
   try {
-    // Step 1: Gather research
     const posts = await gatherResearch();
-    
-    // Step 2: Get existing and rejected ideas
+
     const existing = await getExistingIdeas();
     const rejected = await getRejectedIdeas();
-    console.log(`\n📋 Existing ideas: ${existing.length}, Rejected: ${rejected.length}`);
-    
-    // Step 3: Generate ideas
+    console.log(`\nExisting ideas: ${existing.length}, Rejected: ${rejected.length}`);
+
     const ideas = await generateIdeasFromResearch(posts, existing, rejected);
-    console.log(`\n💡 Generated ${ideas.length} new ideas`);
-    
+    console.log(`\nGenerated ${ideas.length} new ideas`);
+
     if (ideas.length === 0) {
-      console.log('\n⚠️ No new ideas found this sprint. Try again later.');
+      console.log('\nNo new ideas this sprint. Try again later.');
       return;
     }
-    
-    // Step 4: Save and auto-build ideas (silent mode)
-    const saved = await saveAndBuildIdeas(ideas);
-    
-    // Step 5: Update working memory
-    const memoryDir = path.join(SCOUT_DIR, 'memory');
-    fs.mkdirSync(memoryDir, { recursive: true });
-    
-    const logFile = path.join(memoryDir, `sprint-${new Date().toISOString().split('T')[0]}.json`);
-    fs.writeFileSync(logFile, JSON.stringify({
-      timestamp: new Date().toISOString(),
-      postsScanned: posts.length,
-      ideasGenerated: ideas.length,
-      ideasSaved: saved,
-      ideas: ideas
-    }, null, 2));
-    
-    // Summary
-    console.log('\n' + '═'.repeat(60));
-    console.log('✅ Scout Sprint Complete (Silent Mode)');
-    console.log('═'.repeat(60));
-    console.log(`  Posts scanned: ${posts.length}`);
-    console.log(`  Ideas generated: ${ideas.length}`);
-    console.log(`  Ideas auto-approved & building: ${saved}`);
-    console.log(`  Log: ${logFile}`);
-    console.log(`\n  🎯 Silent mode: Builds triggered automatically.`);
-    console.log(`     You'll be notified only when deployments complete.`);
 
+    const saved = await saveScoutedIdeas(ideas);
+
+    if (!SCOUT_DRY_RUN) {
+      const memoryDir = path.join(SCOUT_DIR, 'memory');
+      fs.mkdirSync(memoryDir, { recursive: true });
+
+      const logFile = path.join(memoryDir, `sprint-${new Date().toISOString().split('T')[0]}.json`);
+      fs.writeFileSync(logFile, JSON.stringify({
+        timestamp: new Date().toISOString(),
+        postsScanned: posts.length,
+        ideasGenerated: ideas.length,
+        ideasSaved: saved,
+        ideas: ideas
+      }, null, 2));
+      console.log(`  Sprint log: ${logFile}`);
+    }
+
+    const dashboardUrl = process.env.MISSION_CONTROL_URL || 'https://mission-control.vercel.app';
+    console.log('\nScout sprint complete');
+    console.log(`  Posts scanned:    ${posts.length}`);
+    console.log(`  Ideas generated:  ${ideas.length}`);
+    console.log(`  Ideas saved:      ${saved}`);
+    console.log(`  Review at:        ${dashboardUrl}/ideas`);
+
+    notifyTelegramSummary({ postsScanned: posts.length, ideasSaved: saved, dashboardUrl });
   } catch (err) {
-    console.error('❌ Scout failed:', err.message);
+    console.error('Scout failed:', err.message);
     process.exit(1);
+  }
+}
+
+function notifyTelegramSummary({ postsScanned, ideasSaved, dashboardUrl }) {
+  if (SCOUT_DRY_RUN) return;
+  const botToken = process.env.TELEGRAM_BOT_TOKEN || SECRETS.telegram?.botToken;
+  const chatId = process.env.TELEGRAM_CHAT_ID || SECRETS.telegram?.chatId;
+  if (!botToken || !chatId || ideasSaved === 0) return;
+
+  const text = `Scout sprint complete: scanned ${postsScanned} posts, saved ${ideasSaved} new ideas. Review at ${dashboardUrl}/ideas`;
+  try {
+    execSync(
+      `curl -s -X POST "https://api.telegram.org/bot${botToken}/sendMessage" ` +
+      `-d "chat_id=${chatId}" --data-urlencode "text=${text}"`,
+      { encoding: 'utf-8', timeout: 10000, stdio: 'pipe' }
+    );
+  } catch (err) {
+    console.error(`  Telegram summary failed: ${err.message.substring(0, 100)}`);
   }
 }
 

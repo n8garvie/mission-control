@@ -1,9 +1,10 @@
 "use client";
 
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import Link from "next/link";
+import { Icon, type IconName } from "../lib/iconRegistry";
 
 const columns = [
   { key: "backlog", label: "Backlog", color: "bg-gray-100", borderColor: "border-gray-300" },
@@ -14,15 +15,15 @@ const columns = [
   { key: "blocked", label: "Blocked", color: "bg-red-50", borderColor: "border-red-300" },
 ];
 
-const buildStageIcons: Record<string, string> = {
-  not_started: "⚪",
-  agents_spawning: "🚀",
-  agents_working: "🔨",
-  building_locally: "💻",
-  pushing_to_github: "📦",
-  deploying_to_vercel: "🚢",
-  completed: "✅",
-  failed: "❌",
+const buildStageIconNames: Record<string, IconName> = {
+  not_started: "buildStage.not_started",
+  agents_spawning: "buildStage.agents_spawning",
+  agents_working: "buildStage.agents_working",
+  building_locally: "buildStage.building_locally",
+  pushing_to_github: "buildStage.pushing_to_github",
+  deploying_to_vercel: "buildStage.deploying_to_vercel",
+  completed: "buildStage.completed",
+  failed: "buildStage.failed",
 };
 
 export default function DashboardPage() {
@@ -57,8 +58,8 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
-              <Link href="/" className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-base sm:text-lg font-bold">
-                M
+              <Link href="/" className="icon-tile" aria-label="Mission Control home">
+                <Icon name="brand.logo" size={20} />
               </Link>
               <div>
                 <h1 className="text-base sm:text-xl font-bold text-gray-900">Mission Control Dashboard</h1>
@@ -68,9 +69,10 @@ export default function DashboardPage() {
             
             <Link
               href="/pipeline"
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+              className="btn btn-secondary"
+              aria-label="Pipeline"
             >
-              <span>💡</span>
+              <Icon name="nav.pipeline" size={16} />
               <span className="hidden sm:inline">Pipeline</span>
             </Link>
           </div>
@@ -105,9 +107,12 @@ export default function DashboardPage() {
                       <h4 className="font-medium text-gray-900 mb-2 line-clamp-2">{idea.title}</h4>
                       
                       {/* Build Stage - use status if buildStage not present */}
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg">{buildStageIcons[idea.buildStage || idea.status] || "⚪"}</span>
-                        <span className="text-xs text-gray-500 capitalize">
+                      <div className="flex items-center gap-2 mb-3 text-gray-500">
+                        <Icon
+                          name={buildStageIconNames[idea.buildStage || idea.status] || "buildStage.not_started"}
+                          size={16}
+                        />
+                        <span className="text-xs capitalize">
                           {(idea.buildStage || idea.status)?.replace(/_/g, " ") || "not started"}
                         </span>
                       </div>
@@ -191,11 +196,12 @@ export default function DashboardPage() {
                     {selectedIdea.buildStage?.replace(/_/g, " ")} • {selectedIdea.taskStatus}
                   </p>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedIdea(null)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="btn btn-ghost p-1"
+                  aria-label="Close"
                 >
-                  ✕
+                  <Icon name="pipelineStatus.rejected" size={16} />
                 </button>
               </div>
 

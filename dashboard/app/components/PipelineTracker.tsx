@@ -1,10 +1,12 @@
 "use client";
 
+import { Icon, type IconName } from "../lib/iconRegistry";
+
 interface PipelineStage {
   label: string;
   count: number;
   total: number;
-  icon: string;
+  iconName: IconName;
   color: string;
 }
 
@@ -25,28 +27,28 @@ export default function PipelineTracker({ pipeline }: PipelineTrackerProps) {
       label: "Started",
       count: pipeline.buildsStarted,
       total: pipeline.buildsStarted,
-      icon: "🚀",
+      iconName: "buildStage.agents_spawning",
       color: "var(--text-tertiary)",
     },
     {
       label: "Has Code",
       count: pipeline.buildsWithCode,
       total: pipeline.buildsStarted,
-      icon: "💻",
+      iconName: "buildStage.building_locally",
       color: "var(--info-500)",
     },
     {
       label: "Committed",
       count: pipeline.buildsCommitted,
       total: pipeline.buildsStarted,
-      icon: "📦",
+      iconName: "buildStage.pushing_to_github",
       color: "var(--accent-500)",
     },
     {
       label: "Deployed",
       count: pipeline.buildsDeployed,
       total: pipeline.buildsStarted,
-      icon: "🌐",
+      iconName: "buildStage.deploying_to_vercel",
       color: "var(--success-500)",
     },
   ];
@@ -93,7 +95,7 @@ export default function PipelineTracker({ pipeline }: PipelineTrackerProps) {
                     color: isActive ? stage.color : 'var(--text-tertiary)'
                   }}
                 >
-                  {stage.icon}
+                  <Icon name={stage.iconName} size={18} aria-label={stage.label} />
                 </div>
 
                 {/* Label */}

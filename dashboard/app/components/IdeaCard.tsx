@@ -1,9 +1,18 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Id } from "../../convex/_generated/dataModel";
-import { useState } from "react";
+import { Icon, type IconName } from "../lib/iconRegistry";
+import { BuildNowButton } from "./BuildNowButton";
+
+interface Evidence {
+  sourceUrl: string;
+  sourceTitle: string;
+  score: number;
+  capturedAt: number;
+}
 
 interface Idea {
   _id: Id<"ideas">;
@@ -21,6 +30,9 @@ interface Idea {
   githubRepoUrl?: string;
   source?: string;
   tags?: string[];
+  evidence?: Evidence[];
+  discoverySources?: string[];
+  lastBuildError?: string;
 }
 
 interface IdeaCardProps {
@@ -28,70 +40,46 @@ interface IdeaCardProps {
   onAction?: () => void;
 }
 
-const potentialColors = {
-  low: "bg-gray-100 text-gray-600",
-  medium: "bg-blue-100 text-blue-600",
-  high: "bg-purple-100 text-purple-600",
-  moonshot: "bg-amber-100 text-amber-600",
+const potentialTone: Record<Idea["potential"], "muted" | "info" | "accent" | "warning"> = {
+  low: "muted",
+  medium: "info",
+  high: "accent",
+  moonshot: "warning",
 };
 
-const potentialLabels = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  moonshot: "🚀 Moonshot",
+const pipelineStatusConfig: Record<
+  Idea["pipelineStatus"],
+  { label: string; iconName: IconName; tone: "muted" | "info" | "success" | "error" | "accent" }
+> = {
+  scouted:   { label: "Scouted",   iconName: "pipelineStatus.scouted",  tone: "muted" },
+  reviewing: { label: "Reviewing", iconName: "pipelineStatus.reviewing", tone: "info" },
+  approved:  { label: "Approved",  iconName: "pipelineStatus.approved", tone: "success" },
+  rejected:  { label: "Rejected",  iconName: "pipelineStatus.rejected", tone: "error" },
+  archived:  { label: "Archived",  iconName: "pipelineStatus.archived", tone: "muted" },
 };
 
-const pipelineStatusConfig = {
-  scouted: {
-    badge: "bg-gray-100 text-gray-600",
-    label: "Scouted",
-    icon: "🔍",
-  },
-  reviewing: {
-    badge: "bg-blue-100 text-blue-600",
-    label: "Reviewing",
-    icon: "👀",
-  },
-  approved: {
-    badge: "bg-green-100 text-green-600",
-    label: "Approved",
-    icon: "✅",
-  },
-  rejected: {
-    badge: "bg-red-100 text-red-600",
-    label: "Rejected",
-    icon: "❌",
-  },
-  archived: {
-    badge: "bg-gray-100 text-gray-500",
-    label: "Archived",
-    icon: "📦",
-  },
-};
-
-const buildStageConfig: Record<string, { label: string; icon: string; color: string }> = {
-  not_started: { label: "Not Started", icon: "⚪", color: "text-gray-400" },
-  agents_spawning: { label: "Spawning Agents", icon: "🚀", color: "text-yellow-500" },
-  agents_working: { label: "Agents Working", icon: "🔨", color: "text-blue-500" },
-  building_locally: { label: "Building", icon: "💻", color: "text-purple-500" },
-  pushing_to_github: { label: "GitHub", icon: "📦", color: "text-indigo-500" },
-  deploying_to_vercel: { label: "Deploying", icon: "🚢", color: "text-orange-500" },
-  completed: { label: "Live", icon: "✅", color: "text-green-500" },
-  failed: { label: "Failed", icon: "❌", color: "text-red-500" },
+const buildStageConfig: Record<string, { label: string; iconName: IconName; tone: "muted" | "info" | "success" | "error" | "accent" | "warning" }> = {
+  not_started:         { label: "Not started",     iconName: "buildStage.not_started",         tone: "muted" },
+  agents_spawning:     { label: "Spawning agents", iconName: "buildStage.agents_spawning",     tone: "warning" },
+  agents_working:      { label: "Agents working",  iconName: "buildStage.agents_working",      tone: "info" },
+  building_locally:    { label: "Building",        iconName: "buildStage.building_locally",    tone: "accent" },
+  pushing_to_github:   { label: "Committing",      iconName: "buildStage.pushing_to_github",   tone: "info" },
+  deploying_to_vercel: { label: "Deploying",       iconName: "buildStage.deploying_to_vercel", tone: "warning" },
+  completed:           { label: "Live",            iconName: "buildStage.completed",           tone: "success" },
+  failed:              { label: "Failed",          iconName: "buildStage.failed",              tone: "error" },
 };
 
 export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const approveIdea = useMutation(api.ideas.approve);
   const rejectIdea = useMutation(api.ideas.reject);
   const removeIdea = useMutation(api.ideas.remove);
 
   const status = pipelineStatusConfig[idea.pipelineStatus];
-  const buildStage = idea.buildStage 
-    ? buildStageConfig[idea.buildStage] 
-    : buildStageConfig.not_started;
-  
+  const stageKey = idea.buildStage ?? "not_started";
+  const stage = buildStageConfig[stageKey] ?? buildStageConfig.not_started;
+
   const createdDate = new Date(idea.createdAt).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -100,7 +88,7 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
   const handleApprove = async () => {
     setIsLoading(true);
     try {
-      await approveIdea({ ideaId: idea._id, approvedBy: "nathan" });
+      await approveIdea({ ideaId: idea._id });
       onAction?.();
     } catch (error) {
       console.error("Failed to approve idea:", error);
@@ -133,148 +121,197 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
     }
   };
 
-  const getActionButton = () => {
-    switch (idea.pipelineStatus) {
-      case "scouted":
-        return (
-          <div className="flex gap-2">
-            <button
-              onClick={handleApprove}
-              disabled={isLoading}
-              className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors disabled:opacity-50"
-            >
-              {isLoading ? "..." : "✓ Approve"}
-            </button>
-            <button
-              onClick={handleReject}
-              disabled={isLoading}
-              className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-50"
-            >
-              {isLoading ? "..." : "✕ Reject"}
-            </button>
-          </div>
-        );
-      case "approved":
-        return (
-          <div className="flex items-center justify-center gap-2 text-sm text-green-600 bg-green-50 py-2 px-4 rounded-lg">
-            <span>✓ Approved</span>
-            <span className="text-gray-400">|</span>
-            <span>Ready for Dashboard</span>
-          </div>
-        );
-      case "rejected":
-        return (
-          <div className="flex items-center justify-center gap-2 text-sm text-red-600 bg-red-50 py-2 px-4 rounded-lg">
-            <span>✕ Rejected</span>
-          </div>
-        );
-      case "archived":
-        return (
-          <div className="flex items-center justify-center gap-2 text-sm text-gray-600 bg-gray-100 py-2 px-4 rounded-lg">
-            <span>📦 Archived</span>
-          </div>
-        );
-      default:
-        if (idea.deployedUrl) {
-          return (
-            <a
-              href={idea.deployedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors"
-            >
-              🚀 View Live Site
-            </a>
-          );
-        } else if (idea.githubRepoUrl) {
-          return (
-            <a
-              href={idea.githubRepoUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full text-center px-3 py-2 bg-indigo-500 text-white rounded-lg text-sm font-medium hover:bg-indigo-600 transition-colors"
-            >
-              📦 View on GitHub
-            </a>
-          );
-        } else {
-          return (
-            <div className="flex items-center justify-center gap-2 text-sm text-purple-600 bg-purple-50 py-2 px-4 rounded-lg">
-              <span>{buildStage.icon} {buildStage.label}</span>
-            </div>
-          );
-        }
+  const renderActionRow = () => {
+    if (idea.pipelineStatus === "scouted") {
+      return (
+        <div className="flex gap-2">
+          <button
+            onClick={handleApprove}
+            disabled={isLoading}
+            className="btn btn-primary flex-1"
+            aria-label="Approve idea"
+          >
+            <Icon name="pipelineStatus.approved" size={16} />
+            <span>{isLoading ? "…" : "Approve"}</span>
+          </button>
+          <button
+            onClick={handleReject}
+            disabled={isLoading}
+            className="btn btn-secondary flex-1"
+            aria-label="Reject idea"
+          >
+            <Icon name="pipelineStatus.rejected" size={16} />
+            <span>{isLoading ? "…" : "Reject"}</span>
+          </button>
+        </div>
+      );
     }
+
+    if (idea.pipelineStatus === "approved") {
+      return (
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="status-dot status-dot--success">Approved</span>
+          <BuildNowButton
+            ideaId={idea._id}
+            pipelineStatus={idea.pipelineStatus}
+            buildStage={idea.buildStage}
+            compact
+          />
+        </div>
+      );
+    }
+
+    if (idea.pipelineStatus === "rejected") {
+      return <span className="status-dot status-dot--error">Rejected</span>;
+    }
+
+    if (idea.pipelineStatus === "archived") {
+      return <span className="status-dot status-dot--muted">Archived</span>;
+    }
+
+    if (idea.deployedUrl) {
+      return (
+        <a
+          href={idea.deployedUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-primary w-full"
+        >
+          <Icon name="stage.live" size={16} />
+          <span>View live site</span>
+        </a>
+      );
+    }
+    if (idea.githubRepoUrl) {
+      return (
+        <a
+          href={idea.githubRepoUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn btn-secondary w-full"
+        >
+          <Icon name="buildStage.pushing_to_github" size={16} />
+          <span>View on GitHub</span>
+        </a>
+      );
+    }
+    return (
+      <span className={`status-dot status-dot--${stage.tone}`}>
+        <Icon name={stage.iconName} size={14} />
+        {stage.label}
+      </span>
+    );
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
-      <div className="p-5">
-        {/* Header */}
+    <div className="card overflow-hidden">
+      <div className="card-pad">
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-2 flex-wrap">
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${status.badge}`}>
-                {status.icon} {status.label}
+              <span className={`status-dot status-dot--${status.tone}`}>
+                <Icon name={status.iconName} size={12} />
+                {status.label}
               </span>
-              <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${potentialColors[idea.potential]}`}>
-                {potentialLabels[idea.potential]}
+              <span className={`status-dot status-dot--${potentialTone[idea.potential]}`}>
+                {idea.potential === "moonshot" && <Icon name="entity.moonshot" size={12} />}
+                {idea.potential.charAt(0).toUpperCase() + idea.potential.slice(1)}
               </span>
               {idea.source && (
-                <span className="text-xs text-gray-500">
-                  via {idea.source}
-                </span>
+                <span className="text-caption">via {idea.source}</span>
               )}
             </div>
-            <h3 className="font-semibold text-gray-900 leading-tight">{idea.title}</h3>
+            <h3 className="heading-md leading-tight">{idea.title}</h3>
           </div>
           <button
             onClick={handleDelete}
             disabled={isLoading}
-            className="text-gray-400 hover:text-red-500 transition-colors p-1"
+            className="btn btn-ghost p-1"
             title="Delete idea"
+            aria-label="Delete idea"
           >
-            ✕
+            <Icon name="pipelineStatus.rejected" size={16} />
           </button>
         </div>
 
-        {/* Description */}
-        <p className="text-sm text-gray-600 mb-4 line-clamp-3">{idea.description}</p>
+        <p className="text-body mb-4" style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+          {idea.description}
+        </p>
 
-        {/* Details */}
-        <div className="space-y-2 mb-4 text-sm">
-          <div className="flex items-start gap-2">
-            <span className="text-gray-400 w-20 flex-shrink-0">Target:</span>
-            <span className="text-gray-700">{idea.targetAudience}</span>
-          </div>
-          <div className="flex items-start gap-2">
-            <span className="text-gray-400 w-20 flex-shrink-0">MVP:</span>
-            <span className="text-gray-700 line-clamp-2">{idea.mvpScope}</span>
-          </div>
+        <div className="space-y-2 mb-4">
+          <DetailRow label="Target" value={idea.targetAudience} />
+          <DetailRow label="MVP" value={idea.mvpScope} clamp />
         </div>
 
-        {/* Tags */}
         {idea.tags && idea.tags.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-4">
             {idea.tags.slice(0, 5).map((tag) => (
               <span
                 key={tag}
-                className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
+                className="text-caption"
+                style={{
+                  background: "var(--bg-tertiary)",
+                  color: "var(--text-secondary)",
+                  padding: "0.125rem 0.5rem",
+                  borderRadius: "0.375rem",
+                }}
               >
-                #{tag}
+                {tag}
               </span>
             ))}
           </div>
         )}
 
-        {/* Action Button */}
-        <div className="pt-3 border-t border-gray-100">
-          {getActionButton()}
+        {idea.evidence && idea.evidence.length > 0 && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setEvidenceOpen((v) => !v)}
+              className="status-dot status-dot--muted"
+              aria-expanded={evidenceOpen}
+              aria-label={`Toggle ${idea.evidence.length} sources`}
+            >
+              <Icon name="entity.search" size={12} />
+              {evidenceOpen ? "Hide" : "Show"} {idea.evidence.length} source{idea.evidence.length === 1 ? "" : "s"}
+            </button>
+            {evidenceOpen && (
+              <ul className="mt-2 space-y-1">
+                {idea.evidence.map((ev, i) => (
+                  <li key={i} className="text-small">
+                    <a
+                      href={ev.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="status-dot status-dot--accent"
+                      style={{ fontSize: "0.8125rem" }}
+                    >
+                      <Icon name="entity.next" size={12} />
+                      {ev.sourceTitle}
+                      {ev.score > 0 && <span className="text-caption ml-1">· {ev.score}</span>}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+
+        {idea.lastBuildError && (
+          <div className="status-dot status-dot--error mb-3">
+            <Icon name="entity.warning" size={12} />
+            {idea.lastBuildError.length > 120 ? idea.lastBuildError.substring(0, 120) + "…" : idea.lastBuildError}
+          </div>
+        )}
+
+        <div className="pt-3" style={{ borderTop: "1px solid var(--border-light)" }}>
+          {renderActionRow()}
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+      <div
+        className="px-5 py-3 flex items-center justify-between text-caption"
+        style={{ background: "var(--bg-secondary)", borderTop: "1px solid var(--border-light)" }}
+      >
         <span>Scouted {createdDate}</span>
         {idea.approvedAt && (
           <span>
@@ -282,6 +319,23 @@ export default function IdeaCard({ idea, onAction }: IdeaCardProps) {
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, clamp = false }: { label: string; value: string; clamp?: boolean }) {
+  return (
+    <div className="flex items-start gap-2 text-body">
+      <span className="text-caption w-16 flex-shrink-0 mt-0.5">{label}</span>
+      <span
+        style={
+          clamp
+            ? { display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", color: "var(--text-secondary)" }
+            : { color: "var(--text-secondary)" }
+        }
+      >
+        {value}
+      </span>
     </div>
   );
 }

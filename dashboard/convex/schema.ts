@@ -1,7 +1,11 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 export default defineSchema({
+  // Auth tables (users, sessions, accounts) provided by @convex-dev/auth
+  ...authTables,
+
   // Agent registry
   agents: defineTable({
     name: v.string(),
@@ -188,7 +192,18 @@ export default defineSchema({
     ),
     discoveryUrl: v.optional(v.string()),
     discoveryContext: v.optional(v.string()),
-    
+
+    // Provenance: top scouting sources that inspired this idea, surfaced
+    // on the IdeaCard so the human reviewer can click through to the
+    // original Reddit/HN/etc. posts before approving.
+    evidence: v.optional(v.array(v.object({
+      sourceUrl: v.string(),
+      sourceTitle: v.string(),
+      score: v.number(),
+      capturedAt: v.number(),
+    }))),
+    discoverySources: v.optional(v.array(v.string())),
+
     // Pipeline workflow (for Pipeline UI) - Simplified: Scouted → Approved/Rejected
     pipelineStatus: v.union(
       v.literal("scouted"),
@@ -236,6 +251,15 @@ export default defineSchema({
     buildCompletedAt: v.optional(v.number()),
     buildFailedAt: v.optional(v.number()),
     buildError: v.optional(v.string()),
+
+    // Build queue priority — set by the manual "Build now" mutation so the
+    // build-monitor cron picks the idea on its next tick instead of FIFO.
+    buildPriority: v.optional(v.union(
+      v.literal("normal"),
+      v.literal("high")
+    )),
+    manualTriggerAt: v.optional(v.number()),
+    lastBuildError: v.optional(v.string()),
     
     // Agent spawning tracking (per-agent status)
     agentSpawns: v.optional(v.array(v.object({

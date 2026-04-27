@@ -24,14 +24,14 @@ This is the main dashboard for reviewing ideas, approving builds, and monitoring
 NEXT_PUBLIC_CONVEX_URL=https://flexible-newt-666.convex.cloud
 CONVEX_DEPLOYMENT=prod:flexible-newt-666
 NEXT_PUBLIC_CONVEX_SITE_URL=https://flexible-newt-666.convex.site
-CONVEX_DEPLOY_KEY=dev:beloved-giraffe-115|eyJ2MiI6IjFkMjVkMjc2MGQzYzQzMjhhYmMzYmM4NDc5NjZlYjdjIn0=
+CONVEX_DEPLOY_KEY=dev:beloved-giraffe-115|<REDACTED — get from Convex dashboard>
 ```
 
 ### Required in `.env` (mission-control/)
 ```bash
 export CONVEX_URL=https://beloved-giraffe-115.convex.cloud
-export CONVEX_DEPLOY_KEY="prod:flexible-newt-666|eyJ2MiI6ImQ1OTg1MTA2NWE0OTQxNjI4ODMyMjE0MjI2MDc2ZGMyIn0="
-export CONVEX_ADMIN_KEY="prod:flexible-newt-666|eyJ2MiI6ImQ1OTg1MTA2NWE0OTQxNjI4ODMyMjE0MjI2MDc2ZGMyIn0="
+export CONVEX_DEPLOY_KEY="prod:flexible-newt-666|<REDACTED — get from Convex dashboard>"
+export CONVEX_ADMIN_KEY="prod:flexible-newt-666|<REDACTED — get from Convex dashboard>"
 export GITHUB_TOKEN=ghp_...
 export VERCEL_TOKEN=vcp_...
 ```
@@ -47,7 +47,7 @@ vercel --prod
 ### Deploy Convex Schema
 ```bash
 cd ~/.openclaw/workspace/mission-control/dashboard
-export CONVEX_DEPLOY_KEY="dev:beloved-giraffe-115|eyJ2MiI6IjFkMjVkMjc2MGQzYzQzMjhhYmMzYmM4NDc5NjZlYjdjIn0="
+export CONVEX_DEPLOY_KEY="dev:beloved-giraffe-115|<REDACTED — get from Convex dashboard>"
 npx convex deploy
 ```
 
