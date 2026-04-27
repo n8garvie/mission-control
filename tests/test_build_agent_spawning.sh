@@ -16,7 +16,10 @@ NC='\033[0m'
 TEST_DIR="/home/n8garvie/.openclaw/workspace/mission-control"
 DASHBOARD_DIR="$TEST_DIR/dashboard"
 LOG_FILE="$TEST_DIR/logs/e2e-build-spawning-test-$(date +%Y%m%d-%H%M%S).log"
-CONVEX_DEPLOY_KEY="prod:flexible-newt-666|eyJ2MiI6ImQ1OTg1MTA2NWE0OTQxNjI4ODMyMjE0MjI2MDc2ZGMyIn0="
+if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+    echo "Error: CONVEX_DEPLOY_KEY env var must be set to run this test" >&2
+    exit 1
+fi
 
 # Test counters
 TESTS_PASSED=0

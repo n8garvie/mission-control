@@ -17,6 +17,9 @@ if [ -f "$MISSION_CONTROL_DIR/.env" ]; then
     source "$MISSION_CONTROL_DIR/.env"
 fi
 
+# Preflight: bail early if required env vars (Convex key, at least one LLM key) are missing
+node "$SCRIPTS_DIR/preflight.js" --quiet || exit 1
+
 CONVEX_URL="${CONVEX_URL:-https://beloved-giraffe-115.convex.cloud}"
 CONVEX_ADMIN_KEY="${CONVEX_ADMIN_KEY:-}"
 GITHUB_TOKEN="${GITHUB_TOKEN:-}"

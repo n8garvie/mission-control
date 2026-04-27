@@ -4,8 +4,11 @@
 
 set -e
 
-# Export required environment variables
-export CONVEX_DEPLOY_KEY="prod:flexible-newt-666|eyJ2MiI6ImQ1OTg1MTA2NWE0OTQxNjI4ODMyMjE0MjI2MDc2ZGMyIn0="
+# Required environment variables must be set externally
+if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+    echo "Error: CONVEX_DEPLOY_KEY env var must be set" >&2
+    exit 1
+fi
 
 # Change to mission control directory
 cd /home/n8garvie/.openclaw/workspace/mission-control

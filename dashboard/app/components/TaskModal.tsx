@@ -4,6 +4,17 @@ import { useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { Doc, Id } from "../../convex/_generated/dataModel";
+import { Icon } from "../lib/iconRegistry";
+
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .map((p) => p[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+}
 
 interface TaskModalProps {
   task: any;
@@ -138,11 +149,23 @@ export default function TaskModal({ task, agents, onClose }: TaskModalProps) {
                   <span className="text-caption">No comments yet</span>
                 </div>
               ) : (
-                messages.map((msg) => (
+                messages.map((msg) => {
+                  const authorName = msg.fromHuman
+                    ? "Nathan"
+                    : msg.fromAgent
+                    ? msg.fromAgent.name
+                    : "System";
+                  return (
                   <div key={msg._id} className="flex gap-3 p-3 bg-[var(--bg-secondary)] rounded-lg">
-                    <div className="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-lg flex-shrink-0 border border-[var(--border-light)]">
-                      {msg.fromHuman ? "👤" : msg.fromAgent ? msg.fromAgent.emoji : "🤖"}
-                    </div>
+                    {msg.fromHuman ? (
+                      <span className="avatar-initials" aria-label={authorName}>
+                        {initials(authorName)}
+                      </span>
+                    ) : (
+                      <span className="avatar-agent" aria-label={authorName}>
+                        <Icon name="entity.agent" size={14} />
+                      </span>
+                    )}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <span className="heading-md text-sm">
@@ -155,7 +178,8 @@ export default function TaskModal({ task, agents, onClose }: TaskModalProps) {
                       <p className="text-body">{msg.content}</p>
                     </div>
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

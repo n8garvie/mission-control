@@ -4,19 +4,21 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useState } from "react";
 import Link from "next/link";
+import { Icon } from "../lib/iconRegistry";
+import { BuildNowButton } from "../components/BuildNowButton";
 
-const potentialColors: Record<string, string> = {
-  low: "bg-gray-100 text-gray-600",
-  medium: "bg-blue-100 text-blue-600",
-  high: "bg-purple-100 text-purple-600",
-  moonshot: "bg-amber-100 text-amber-600",
+const potentialTone: Record<string, "muted" | "info" | "accent" | "warning"> = {
+  low: "muted",
+  medium: "info",
+  high: "accent",
+  moonshot: "warning",
 };
 
 const potentialLabels: Record<string, string> = {
   low: "Low",
   medium: "Medium",
   high: "High",
-  moonshot: "🚀 Moonshot",
+  moonshot: "Moonshot",
 };
 
 export default function PipelinePage() {
@@ -30,7 +32,7 @@ export default function PipelinePage() {
   const handleApprove = async (ideaId: string) => {
     setIsLoading(ideaId);
     try {
-      await approveIdea({ ideaId: ideaId as any, approvedBy: "nathan" });
+      await approveIdea({ ideaId: ideaId as any });
     } catch (error) {
       console.error("Failed to approve:", error);
     } finally {
@@ -67,8 +69,8 @@ export default function PipelinePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 sm:py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 sm:gap-3">
-              <Link href="/" className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-base sm:text-lg font-bold">
-                M
+              <Link href="/" className="icon-tile" aria-label="Mission Control home">
+                <Icon name="brand.logo" size={20} />
               </Link>
               <div>
                 <h1 className="text-base sm:text-xl font-bold text-gray-900">Idea Pipeline</h1>
@@ -76,11 +78,8 @@ export default function PipelinePage() {
               </div>
             </div>
             
-            <Link
-              href="/"
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors font-medium text-sm"
-            >
-              <span>📊</span>
+            <Link href="/" className="btn btn-secondary" aria-label="Overview">
+              <Icon name="entity.stats" size={16} />
               <span className="hidden sm:inline">Overview</span>
             </Link>
           </div>
@@ -112,14 +111,15 @@ export default function PipelinePage() {
             <p className="text-gray-500">Loading ideas...</p>
           </div>
         ) : ideas.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
-            <div className="text-4xl mb-3">💡</div>
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No {activeTab} ideas</h3>
-            <p className="text-gray-500">
-              {activeTab === "scouted" 
-                ? "Scout will discover ideas automatically"
-                : `No ideas in ${activeTab} status`
-              }
+          <div className="card card-pad text-center">
+            <span className="icon-tile mx-auto mb-3" aria-hidden>
+              <Icon name="nav.ideas" size={20} />
+            </span>
+            <h3 className="heading-md mb-1">No {activeTab} ideas</h3>
+            <p className="text-body">
+              {activeTab === "scouted"
+                ? "Scout will discover ideas overnight."
+                : `No ideas in ${activeTab} status.`}
             </p>
           </div>
         ) : (
@@ -127,20 +127,18 @@ export default function PipelinePage() {
             {ideas.map((idea: any) => (
               <div key={idea._id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow">
                 <div className="p-5">
-                  {/* Header */}
                   <div className="flex items-start justify-between gap-3 mb-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${potentialColors[idea.potential]}`}>
+                        <span className={`status-dot status-dot--${potentialTone[idea.potential] ?? "muted"}`}>
+                          {idea.potential === "moonshot" && <Icon name="entity.moonshot" size={12} />}
                           {potentialLabels[idea.potential]}
                         </span>
                         {idea.discoverySource && (
-                          <span className="text-xs text-gray-500">
-                            via {idea.discoverySource}
-                          </span>
+                          <span className="text-caption">via {idea.discoverySource}</span>
                         )}
                       </div>
-                      <h3 className="font-semibold text-gray-900 leading-tight">{idea.title}</h3>
+                      <h3 className="heading-md leading-tight">{idea.title}</h3>
                     </div>
                   </div>
 
@@ -173,31 +171,38 @@ export default function PipelinePage() {
                     </div>
                   )}
 
-                  {/* Actions */}
                   {activeTab === "scouted" && (
-                    <div className="flex gap-2 pt-4 border-t border-gray-100">
+                    <div className="flex gap-2 pt-4" style={{ borderTop: "1px solid var(--border-light)" }}>
                       <button
                         onClick={() => handleApprove(idea._id)}
                         disabled={isLoading === idea._id}
-                        className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg text-sm font-medium hover:bg-green-600 transition-colors disabled:opacity-50"
+                        className="btn btn-primary flex-1"
+                        aria-label="Approve idea"
                       >
-                        {isLoading === idea._id ? "..." : "✓ Approve"}
+                        <Icon name="pipelineStatus.approved" size={16} />
+                        <span>{isLoading === idea._id ? "…" : "Approve"}</span>
                       </button>
                       <button
                         onClick={() => handleReject(idea._id)}
                         disabled={isLoading === idea._id}
-                        className="flex-1 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium hover:bg-red-100 transition-colors disabled:opacity-50"
+                        className="btn btn-secondary flex-1"
+                        aria-label="Reject idea"
                       >
-                        {isLoading === idea._id ? "..." : "✕ Reject"}
+                        <Icon name="pipelineStatus.rejected" size={16} />
+                        <span>{isLoading === idea._id ? "…" : "Reject"}</span>
                       </button>
                     </div>
                   )}
 
                   {activeTab === "approved" && (
-                    <div className="flex items-center justify-center gap-2 text-sm text-green-600 bg-green-50 py-2 px-4 rounded-lg">
-                      <span>✓ Approved</span>
-                      <span className="text-gray-400">|</span>
-                      <span>Ready to Build</span>
+                    <div className="flex items-center justify-between gap-2 pt-4" style={{ borderTop: "1px solid var(--border-light)" }}>
+                      <span className="status-dot status-dot--success">Approved</span>
+                      <BuildNowButton
+                        ideaId={idea._id}
+                        pipelineStatus={idea.pipelineStatus}
+                        buildStage={idea.buildStage}
+                        compact
+                      />
                     </div>
                   )}
                 </div>

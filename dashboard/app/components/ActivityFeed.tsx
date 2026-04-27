@@ -1,59 +1,43 @@
+"use client";
+
+import { Icon, type IconName } from "../lib/iconRegistry";
+
 interface ActivityFeedProps {
   activities: any[];
 }
 
-const activityConfig: Record<string, { icon: string; color: string; bgColor: string }> = {
-  task_created: { 
-    icon: "✨", 
-    color: "var(--accent-500)",
-    bgColor: "var(--accent-50)",
-  },
-  task_updated: { 
-    icon: "📝", 
-    color: "var(--info-500)",
-    bgColor: "var(--info-50)",
-  },
-  task_completed: { 
-    icon: "✅", 
-    color: "var(--success-500)",
-    bgColor: "var(--success-50)",
-  },
-  message_sent: { 
-    icon: "💬", 
-    color: "var(--text-secondary)",
-    bgColor: "var(--bg-tertiary)",
-  },
-  document_created: { 
-    icon: "📄", 
-    color: "var(--warning-500)",
-    bgColor: "var(--warning-50)",
-  },
-  agent_heartbeat: { 
-    icon: "💓", 
-    color: "var(--error-500)",
-    bgColor: "var(--error-50)",
-  },
-  project_created: { 
-    icon: "🚀", 
-    color: "var(--accent-500)",
-    bgColor: "var(--accent-50)",
-  },
-  status_change: { 
-    icon: "🔄", 
-    color: "var(--info-500)",
-    bgColor: "var(--info-50)",
-  },
-  idea_submitted: {
-    icon: "💡",
-    color: "var(--warning-500)",
-    bgColor: "var(--warning-50)",
-  },
-  idea_approved: {
-    icon: "👍",
-    color: "var(--success-500)",
-    bgColor: "var(--success-50)",
-  },
+type Tone = "muted" | "info" | "success" | "error" | "accent" | "warning";
+
+const activityConfig: Record<string, { iconName: IconName; tone: Tone }> = {
+  task_created:              { iconName: "activity.task_created",       tone: "accent" },
+  task_updated:              { iconName: "activity.task_updated",       tone: "info" },
+  task_completed:            { iconName: "activity.idea_approved",      tone: "success" },
+  message_sent:              { iconName: "activity.comment_added",      tone: "muted" },
+  document_created:          { iconName: "activity.task_created",       tone: "warning" },
+  agent_heartbeat:           { iconName: "activity.agent_heartbeat",    tone: "error" },
+  project_created:           { iconName: "activity.idea_created",       tone: "accent" },
+  status_change:             { iconName: "activity.status_change",      tone: "info" },
+  idea_submitted:            { iconName: "activity.idea_scouted",       tone: "warning" },
+  idea_scouted:              { iconName: "activity.idea_scouted",       tone: "warning" },
+  idea_created:              { iconName: "activity.idea_created",       tone: "accent" },
+  idea_approved:             { iconName: "activity.idea_approved",      tone: "success" },
+  idea_rejected:             { iconName: "activity.idea_rejected",      tone: "error" },
+  idea_archived:             { iconName: "activity.idea_archived",      tone: "muted" },
+  build_started:             { iconName: "activity.build_started",      tone: "info" },
+  build_completed:           { iconName: "activity.build_completed",    tone: "success" },
+  build_failed:              { iconName: "activity.build_failed",       tone: "error" },
+  build_triggered_manually:  { iconName: "activity.build_triggered_manually", tone: "accent" },
+  comment_added:             { iconName: "activity.comment_added",      tone: "muted" },
+  vote:                      { iconName: "activity.vote",               tone: "success" },
 };
+
+const DEFAULT_CONFIG = { iconName: "activity.default" as IconName, tone: "muted" as Tone };
+
+function stripLeadingEmoji(message: string): string {
+  // Defensive — historical activity rows still carry a leading emoji+space.
+  // Strip the first run of pictographic chars + whitespace.
+  return message.replace(/^[\p{Extended_Pictographic}‍️]+\s*/u, "");
+}
 
 export default function ActivityFeed({ activities }: ActivityFeedProps) {
   const formatTime = (timestamp: number) => {
@@ -67,69 +51,58 @@ export default function ActivityFeed({ activities }: ActivityFeedProps) {
     if (minutes < 60) return `${minutes}m ago`;
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
-    return new Date(timestamp).toLocaleDateString([], { month: 'short', day: 'numeric' });
-  };
-
-  const getActivityStyle = (type: string) => {
-    return activityConfig[type] || { 
-      icon: "📌", 
-      color: "var(--text-muted)",
-      bgColor: "var(--bg-tertiary)",
-    };
+    return new Date(timestamp).toLocaleDateString([], { month: "short", day: "numeric" });
   };
 
   return (
-    <div className="card p-4">
+    <div className="card card-pad-sm">
       <div className="space-y-0 max-h-[600px] overflow-y-auto scrollbar-thin">
         {activities.length === 0 ? (
           <div className="text-center py-12">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--bg-tertiary)] flex items-center justify-center text-2xl">
-              📭
-            </div>
-            <p className="text-sm text-[var(--text-secondary)] mb-1">No recent activity</p>
-            <p className="text-xs text-[var(--text-muted)]">Activity will appear here as the team works</p>
+            <span className="timeline-dot mx-auto mb-3" aria-hidden>
+              <Icon name="activity.default" size={14} />
+            </span>
+            <p className="text-body mb-1">No recent activity</p>
+            <p className="text-small">Activity will appear here as the team works</p>
           </div>
         ) : (
           activities.map((activity, index) => {
-            const style = getActivityStyle(activity.type);
-            const isRecent = Date.now() - activity._creationTime < 60000; // Less than 1 minute
-            
+            const cfg = activityConfig[activity.type] ?? DEFAULT_CONFIG;
+            const isRecent = Date.now() - activity._creationTime < 60000;
+            const cleanMessage = stripLeadingEmoji(activity.message ?? "");
+
             return (
               <div
                 key={activity._id}
-                className={`group py-3 ${index !== activities.length - 1 ? 'border-b border-[var(--border-light)]' : ''} animate-fade-in-up hover:bg-[var(--bg-secondary)] -mx-2 px-2 rounded-lg transition-colors duration-200`}
+                className={`py-3 -mx-2 px-2 rounded-lg transition-colors duration-200 hover:bg-[var(--bg-secondary)] animate-fade-in-up ${
+                  index !== activities.length - 1 ? "border-b border-[var(--border-light)]" : ""
+                }`}
                 style={{ animationDelay: `${index * 50}ms` }}
               >
                 <div className="flex gap-3">
-                  {/* Icon */}
-                  <div 
-                    className="w-8 h-8 rounded-lg flex items-center justify-center text-base flex-shrink-0 transition-transform duration-200 group-hover:scale-110"
-                    style={{ 
-                      backgroundColor: style.bgColor,
-                      color: style.color,
-                    }}
+                  <span
+                    className={`timeline-dot timeline-dot--${cfg.tone}`}
+                    aria-hidden
                   >
-                    {style.icon}
-                  </div>
-                  
-                  {/* Content */}
+                    <Icon name={cfg.iconName} size={14} />
+                  </span>
+
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-[var(--text-primary)] leading-relaxed">
-                      {activity.message}
+                    <p className="text-sm leading-relaxed" style={{ color: "var(--text-primary)" }}>
+                      {cleanMessage}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className={`text-[10px] font-medium ${isRecent ? 'text-[var(--success-500)]' : 'text-[var(--text-muted)]'}`}>
+                      <span
+                        className="text-caption"
+                        style={{ color: isRecent ? "var(--success-600)" : "var(--text-muted)" }}
+                      >
                         {formatTime(activity._creationTime)}
                       </span>
                       {activity.task && (
-                        <span className="text-xs text-[var(--text-tertiary)] truncate max-w-[120px]">
-                          · {activity.task.title}
-                        </span>
+                        <span className="text-caption truncate max-w-[160px]">· {activity.task.title}</span>
                       )}
                       {activity.agent && (
-                        <span className="text-xs text-[var(--text-tertiary)]">
-                          · {activity.agent.emoji} {activity.agent.name}
-                        </span>
+                        <span className="text-caption">· {activity.agent.name}</span>
                       )}
                     </div>
                   </div>
@@ -139,12 +112,16 @@ export default function ActivityFeed({ activities }: ActivityFeedProps) {
           })
         )}
       </div>
-      
-      {/* Footer */}
+
       {activities.length > 0 && (
-        <div className="mt-4 pt-3 border-t border-[var(--border-light)] text-center">
-          <button className="text-xs font-medium text-[var(--accent-600)] hover:text-[var(--accent-700)] transition-colors">
-            View all activity →
+        <div className="mt-4 pt-3 text-center" style={{ borderTop: "1px solid var(--border-light)" }}>
+          <button
+            type="button"
+            className="text-caption"
+            style={{ color: "var(--accent-700)", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}
+          >
+            View all activity
+            <Icon name="entity.next" size={12} />
           </button>
         </div>
       )}

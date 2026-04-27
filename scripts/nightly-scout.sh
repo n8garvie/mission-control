@@ -4,10 +4,12 @@
 
 set -e
 
-# Export required environment variables
-export CONVEX_DEPLOY_KEY="prod:flexible-newt-666|eyJ2MiI6ImQ1OTg1MTA2NWE0OTQxNjI4ODMyMjE0MjI2MDc2ZGMyIn0="
-export TELEGRAM_BOT_TOKEN="8236998222:AAE72SLm6G45dFGYOhV3tFf-JHSCUF9f9OM"
-export TELEGRAM_CHAT_ID="7923502221"
+# Required environment variables must be set externally (CONVEX_DEPLOY_KEY,
+# optionally TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID for notifications).
+if [ -z "$CONVEX_DEPLOY_KEY" ]; then
+    echo "Error: CONVEX_DEPLOY_KEY env var must be set" >&2
+    exit 1
+fi
 
 # Change to mission control directory
 cd /home/n8garvie/.openclaw/workspace/mission-control
